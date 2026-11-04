@@ -6,7 +6,7 @@ Reproduces Zernio's *functional categories* with lawful official APIs. Not a clo
 ## Architecture (do not drift)
 - pnpm monorepo. `apps/web` = Next.js 15 App Router (UI + `/api/*` routes). `apps/worker` = always-on job runner.
 - `packages/db` Prisma/PostgreSQL schema. `packages/core` domain services + Postgres job queue. `packages/integrations` provider adapters.
-  `packages/security` AES-256-GCM credential encryption, scrypt passwords, JWT sessions, OAuth/PKCE, webhook HMAC. `packages/media` storage drivers (local, S3-compatible) + content sniffing.
+  `packages/security` AES-256-GCM credential encryption, scrypt passwords, JWT sessions, OAuth/PKCE, webhook HMAC. `packages/media` storage drivers (local, supabase-edge, S3-compatible, vercel-blob) + content sniffing. Browser-direct uploads via `/api/media/presign` → signed PUT → `/api/media/:id/finalize`.
 - Queue: Postgres table `Job` claimed with `FOR UPDATE SKIP LOCKED`; retries with backoff + `Retry-After`; dead-letter; orphan-lock reaping.
   Runs via `apps/worker` (always-on) or `POST /api/jobs/tick` (serverless cron). Decision: no Redis — one fewer paid service, same guarantees at this scale.
 - Adapter contract: `packages/integrations/src/contract.ts`. Two backends per provider: `native` (official APIs) and `zernio` (optional gateway, isolated in `src/zernio/`, replaceable, never silently mandatory).

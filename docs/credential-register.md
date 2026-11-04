@@ -10,7 +10,7 @@ Put values in `.env.local` (web), `.env` (worker/prisma) or the hosting provider
 | `TOKEN_ENCRYPTION_KEY` | AES-256-GCM key for provider credentials | `openssl rand -base64 32` (32 bytes). Losing it = all connections must be redone |
 | `CRON_SECRET` | protects `/api/jobs/tick` | `openssl rand -hex 24` |
 | `PUBLIC_APP_URL` | absolute URL used in OAuth callbacks and webhooks | your HTTPS domain |
-| `STORAGE_DRIVER` + `STORAGE_*` | `local` (dev) or `s3` (Supabase Storage S3, MinIO, R2). `s3` is required for Instagram native publishing (signed URLs) | Supabase → Storage → S3 access keys; bucket private |
+| `STORAGE_DRIVER` | `local` (dev), `supabase-edge` (production default: private Supabase bucket `media` behind the `media` Edge Function; `MEDIA_GATEWAY_URL` + `MEDIA_GATEWAY_SECRET`), `s3` (`STORAGE_*`, e.g. Supabase S3 keys/MinIO/R2) or `vercel-blob` (`BLOB_READ_WRITE_TOKEN`). Any driver except `local` gives signed URLs, which Instagram native publishing needs | already provisioned on Supabase project `spagnol-social-manager` |
 | `OWNER_EMAIL`, `OWNER_PASSWORD` | seed only (`pnpm db:seed`); hashed, never stored in clear | choose |
 
 ## Zernio gateway (recommended first path for Facebook/Instagram)

@@ -16,4 +16,4 @@ pnpm test && pnpm typecheck
 
 ## Deploy
 - Web: Vercel (root directory `apps/web`, build `pnpm build`, install at repo root). `vercel.json` schedules `/api/jobs/tick` on the Hobby plan limit; for minute-level native scheduling run `apps/worker` on an always-on host or ping the tick endpoint every few minutes from cron-job.org. Posts published through the Zernio backend are scheduled by Zernio itself and do not depend on the runner.
-- Database: Supabase Postgres (`DATABASE_URL` = transaction pooler with `pgbouncer=true`, `DIRECT_URL` = session pooler). Media: Supabase Storage S3 (`STORAGE_DRIVER=s3`).
+- Database: Supabase Postgres (`DATABASE_URL` = transaction pooler with `pgbouncer=true`, `DIRECT_URL` = session pooler). Media: private Supabase Storage bucket through the `media` Edge Function (`STORAGE_DRIVER=supabase-edge`, source in `supabase/functions/media`).

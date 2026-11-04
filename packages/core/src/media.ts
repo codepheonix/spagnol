@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
 import { prisma, type MediaAsset } from "@sm/db";
-import { getStorage, probeMedia, safeFilename } from "@sm/media";
+import { ALLOWED_MIME, MAX_UPLOAD_BYTES, getStorage, probeMedia, safeFilename } from "@sm/media";
 import type { MediaRef } from "@sm/integrations";
 import { AppError } from "./connections";
 
@@ -19,6 +19,37 @@ export async function createMediaFromBytes(input: { brandId: string; filename: s
   }
 }
 
+/** Step 1 of a browser-direct upload: reserve the asset and return a signed PUT URL (null when the driver cannot sign). */
+export async function presignMediaUpload(input: { brandId: string; filename: string; mimeType: string; sizeBytes: number; altText?: string | null }): Promise<{ asset: MediaAsset; uploadUrl: string | null }> {
+  if (!ALLOWED_MIME.has(input.mimeType)) throw new AppError(`Unsupported file type ${input.mimeType}.`, 415, "unsupported_type");
+  if (input.sizeBytes > MAX_UPLOAD_BYTES) throw new AppError("File too large.", 413, "too_big");
+  const filename = safeFilename(input.filename);
+  const key = `brands/${input.brandId}/${new Date().toISOString().slice(0, 10)}/${randomUUID()}-${filename}`;
+  const uploadUrl = await getStorage().signedPutUrl(key, input.mimeType, 900);
+  const asset = await prisma.mediaAsset.create({ data: { brandId: input.brandId, storageKey: key, originalName: filename, mimeType: input.mimeType, sizeBytes: input.sizeBytes, altText: input.altText ?? null, status: "received" } });
+  return { asset, uploadUrl };
+}
+
+/** Step 2: the browser finished the PUT; download, sniff and measure before marking `ready`. */
+export async function finalizeMediaUpload(brandId: string, mediaId: string): Promise<MediaAsset> {
+  const asset = await prisma.mediaAsset.findFirst({ where: { id: mediaId, brandId } });
+  if (!asset) throw new AppError("Media not found.", 404, "not_found");
+  if (asset.status === "ready") return asset;
+  await prisma.mediaAsset.update({ where: { id: asset.id }, data: { status: "processing" } });
+  let bytes: Buffer;
+  try {
+    bytes = await getStorage().get(asset.storageKey);
+  } catch (err) {
+    return prisma.mediaAsset.update({ where: { id: asset.id }, data: { status: "failed", error: `upload not found in storage: ${(err as Error).message}` } });
+  }
+  const probe = probeMedia(bytes, asset.mimeType);
+  if (!probe.ok) {
+    await getStorage().delete(asset.storageKey).catch(() => undefined);
+    return prisma.mediaAsset.update({ where: { id: asset.id }, data: { status: "failed", error: probe.error } });
+  }
+  return prisma.mediaAsset.update({ where: { id: asset.id }, data: { status: "ready", mimeType: probe.detectedMime ?? asset.mimeType, sizeBytes: bytes.length, width: probe.width, height: probe.height, checksum: createHash("sha256").update(bytes).digest("hex"), error: null } });
+}
+
 /** Builds adapter-facing media references; refuses media that is not `ready`. */
 export async function mediaRefsFor(assets: MediaAsset[]): Promise<MediaRef[]> {
   const storage = getStorage();
@@ -34,7 +65,7 @@ export async function mediaRefsFor(assets: MediaAsset[]): Promise<MediaRef[]> {
       altText: a.altText,
       filename: a.originalName,
       read: () => storage.get(a.storageKey),
-      signedUrl: storage.name === "s3" ? () => storage.signedGetUrl(a.storageKey, 3600) : undefined,
+      signedUrl: storage.name !== "local" ? () => storage.signedGetUrl(a.storageKey, 3600) : undefined,
     };
   });
 }

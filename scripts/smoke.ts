@@ -123,7 +123,7 @@ async function main() {
 
   const tick2 = await api(`/api/jobs/tick?secret=${process.env.CRON_SECRET ?? "local-cron-secret"}`, { method: "POST" });
   const again = await api(`/api/posts/${postId}`);
-  assert(again.post.targets[0].attempts === 1 && !calls.slice(before + 1).includes("sendPhoto"), "second tick does not double-post (idempotent)");
+  assert(again.post.targets[0].attempts === 1 && calls.filter((c) => c === "sendPhoto").length === 1, "second tick does not double-post (idempotent: exactly one sendPhoto)");
 
   const cal = await api(`/api/calendar?brandId=${brandId}`);
   assert(cal.events.some((e: any) => e.id === postId), "calendar lists the post");

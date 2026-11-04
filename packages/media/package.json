@@ -5,7 +5,9 @@
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
-  "exports": { ".": "./src/index.ts" },
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run"
@@ -13,6 +15,7 @@
   "dependencies": {
     "@aws-sdk/client-s3": "^3.726.1",
     "@aws-sdk/s3-request-presigner": "^3.726.1",
+    "@vercel/blob": "^2.8.2",
     "image-size": "^1.2.0"
   },
   "devDependencies": {
