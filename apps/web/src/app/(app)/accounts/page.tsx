@@ -1,5 +1,5 @@
 import { prisma } from "@sm/db";
-import { listDescriptors, nativeEnvMissing } from "@sm/integrations";
+import { hasNativeAdapter, listDescriptors, nativeEnvMissing } from "@sm/integrations";
 import { getZernioConfig, formatInZone } from "@sm/core";
 import { requireUser, requireBrand } from "@/lib/auth";
 import { ConnectPanel, type Descriptor } from "@/components/ConnectPanel";
@@ -10,7 +10,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const brand = await requireBrand(user);
   const sp = await searchParams;
   const zernio = Boolean(await getZernioConfig());
-  const providers: Descriptor[] = listDescriptors().map((d) => ({ id: d.id, backend: d.backend, displayName: d.displayName, connect: d.connect as Descriptor["connect"], implementationStatus: d.implementationStatus, missingEnv: d.backend === "native" ? nativeEnvMissing(d) : [], capabilities: d.capabilities as Record<string, string>, docsUrl: d.docsUrl }));
+  const providers: Descriptor[] = listDescriptors().map((d) => ({ id: d.id, backend: d.backend, displayName: d.displayName, connect: d.connect as Descriptor["connect"], implementationStatus: d.backend === "native" && !hasNativeAdapter(d.id) ? "NOT_IMPLEMENTED" : d.implementationStatus, missingEnv: d.backend === "native" ? nativeEnvMissing(d) : [], capabilities: d.capabilities as Record<string, string>, docsUrl: d.docsUrl }));
   const accounts = await prisma.socialAccount.findMany({ where: { brandId: brand.id }, orderBy: [{ provider: "asc" }, { createdAt: "asc" }] });
   const capKeys = ["publish_text", "publish_image", "publish_video", "publish_carousel", "publish_story", "schedule_remote", "read_analytics", "read_comments", "reply_comment", "read_dm", "send_dm", "ads_read"];
   return (
