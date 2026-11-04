@@ -1,0 +1,656 @@
+// Personal-use social media manager — data model.
+// All timestamps are stored in UTC. Local IANA timezone identifiers are stored alongside where scheduling matters.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ---------------------------------------------------------------------------
+// Owner, sessions, brands
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  name         String?
+  passwordHash String
+  timezone     String    @default("Europe/Rome")
+  locale       String    @default("it")
+  totpSecretEnc String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sessions     Session[]
+  brands       Brand[]
+  auditLogs    AuditLog[]
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  userAgent String?
+  ip        String?
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+model Brand {
+  id          String    @id @default(cuid())
+  ownerId     String
+  owner       User      @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name        String
+  slug        String
+  websiteUrl  String?
+  timezone    String    @default("Europe/Rome")
+  locale      String    @default("it")
+  color       String?
+  settings    Json      @default("{}")
+  archivedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  socialAccounts SocialAccount[]
+  mediaAssets    MediaAsset[]
+  posts          Post[]
+  scheduleSlots  ScheduleSlot[]
+  oauthStates    OAuthState[]
+  inboxThreads   InboxThread[]
+  comments       Comment[]
+  reviews        Review[]
+  analytics      AnalyticsMetric[]
+  adAccounts     AdAccount[]
+  adDrafts       AdCampaignDraft[]
+  automations    AutomationRule[]
+  contacts       ContactRecord[]
+  notifications  Notification[]
+  jobs           Job[]
+  auditLogs      AuditLog[]
+
+  @@unique([ownerId, slug])
+}
+
+// ---------------------------------------------------------------------------
+// Connections and credentials
+// ---------------------------------------------------------------------------
+
+enum AdapterBackend {
+  native
+  zernio
+}
+
+enum ConnectionStatus {
+  connected
+  needs_reconnect
+  disconnected
+  error
+}
+
+model SocialAccount {
+  id                String           @id @default(cuid())
+  brandId           String
+  brand             Brand            @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  provider          String // telegram | bluesky | facebook | instagram | ...
+  backend           AdapterBackend   @default(native)
+  externalAccountId String // provider account id (page id, channel id, DID, ...)
+  accountType       String? // page | professional | channel | organization | ...
+  displayName       String
+  username          String?
+  profileUrl        String?
+  avatarUrl         String?
+  scopes            String[]         @default([])
+  status            ConnectionStatus @default(connected)
+  healthStatus      String           @default("unknown") // healthy | warning | error | unknown
+  lastCheckedAt     DateTime?
+  lastError         String?
+  tokenExpiresAt    DateTime?
+  gatewayAccountId  String? // Zernio account id when backend = zernio
+  gatewayProfileId  String? // Zernio profile id when backend = zernio
+  metadata          Json             @default("{}")
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  token        SocialAccountToken?
+  postTargets  PostTarget[]
+  scheduleSlots ScheduleSlot[]
+  inboxThreads InboxThread[]
+  comments     Comment[]
+  reviews      Review[]
+  analytics    AnalyticsMetric[]
+
+  @@unique([brandId, provider, externalAccountId, backend])
+  @@index([brandId, provider])
+}
+
+model SocialAccountToken {
+  id               String        @id @default(cuid())
+  socialAccountId  String        @unique
+  socialAccount    SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  // AES-256-GCM encrypted JSON credentials blob (access/refresh tokens, bot tokens, app passwords...)
+  ciphertext       String
+  iv               String
+  authTag          String
+  keyVersion       Int           @default(1)
+  expiresAt        DateTime?
+  refreshExpiresAt DateTime?
+  rotatedAt        DateTime      @default(now())
+}
+
+model OAuthState {
+  id           String    @id @default(cuid())
+  state        String    @unique
+  brandId      String
+  brand        Brand     @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  provider     String
+  backend      AdapterBackend @default(native)
+  codeVerifier String?
+  redirectUri  String
+  payload      Json      @default("{}")
+  expiresAt    DateTime
+  consumedAt   DateTime?
+  createdAt    DateTime  @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// Media
+// ---------------------------------------------------------------------------
+
+enum MediaStatus {
+  received
+  processing
+  ready
+  failed
+}
+
+model MediaAsset {
+  id           String      @id @default(cuid())
+  brandId      String
+  brand        Brand       @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  storageKey   String      @unique
+  originalName String
+  mimeType     String
+  sizeBytes    Int
+  width        Int?
+  height       Int?
+  durationMs   Int?
+  checksum     String?
+  status       MediaStatus @default(received)
+  altText      String?
+  caption      String?
+  error        String?
+  metadata     Json        @default("{}")
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  postMedia PostMedia[]
+
+  @@index([brandId, status])
+}
+
+// ---------------------------------------------------------------------------
+// Posts, targets, attempts
+// ---------------------------------------------------------------------------
+
+enum PostStatus {
+  draft
+  validated
+  scheduled
+  publishing
+  published
+  partial
+  failed
+  canceled
+}
+
+enum TargetStatus {
+  pending
+  blocked
+  queued
+  uploading
+  processing
+  published
+  failed_retryable
+  failed_permanent
+  canceled
+  needs_reconnect
+}
+
+model Post {
+  id               String     @id @default(cuid())
+  brandId          String
+  brand            Brand      @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  title            String?
+  body             String     @default("")
+  link             String?
+  tags             String[]   @default([])
+  campaignTag      String?
+  status           PostStatus @default(draft)
+  scheduledAt      DateTime? // UTC instant
+  scheduleTimezone String? // IANA zone used when the user picked the time
+  publishedAt      DateTime?
+  canceledAt       DateTime?
+  idempotencyKey   String     @unique @default(cuid())
+  metadata         Json       @default("{}")
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+
+  media   PostMedia[]
+  targets PostTarget[]
+
+  @@index([brandId, status, scheduledAt])
+}
+
+model PostMedia {
+  postId   String
+  post     Post       @relation(fields: [postId], references: [id], onDelete: Cascade)
+  mediaId  String
+  media    MediaAsset @relation(fields: [mediaId], references: [id], onDelete: Cascade)
+  position Int        @default(0)
+
+  @@id([postId, mediaId])
+}
+
+model PostTarget {
+  id              String        @id @default(cuid())
+  postId          String
+  post            Post          @relation(fields: [postId], references: [id], onDelete: Cascade)
+  socialAccountId String
+  socialAccount   SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  status          TargetStatus  @default(pending)
+  overrides       Json          @default("{}") // per-network caption/title/privacy/etc.
+  validation      Json? // last validation report
+  remotePostId    String?
+  remoteUrl       String?
+  lastError       String?
+  errorCategory   String?
+  attempts        Int           @default(0)
+  nextRetryAt     DateTime?
+  lastAttemptAt   DateTime?
+  publishedAt     DateTime?
+  reconciledAt    DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  publishAttempts PublishAttempt[]
+
+  @@unique([postId, socialAccountId])
+  @@index([status, nextRetryAt])
+}
+
+model PublishAttempt {
+  id                String     @id @default(cuid())
+  postTargetId      String
+  postTarget        PostTarget @relation(fields: [postTargetId], references: [id], onDelete: Cascade)
+  idempotencyKey    String     @unique
+  attemptNumber     Int
+  status            String // started | succeeded | failed | unknown
+  providerRequestId String?
+  remotePostId      String?
+  requestSummary    Json? // redacted
+  responseSummary   Json? // redacted
+  error             String?
+  startedAt         DateTime   @default(now())
+  finishedAt        DateTime?
+
+  @@index([providerRequestId])
+}
+
+// ---------------------------------------------------------------------------
+// Scheduling & durable queue (Postgres-backed; SKIP LOCKED claiming)
+// ---------------------------------------------------------------------------
+
+model ScheduleSlot {
+  id              String         @id @default(cuid())
+  brandId         String
+  brand           Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  socialAccountId String?
+  socialAccount   SocialAccount? @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  weekday         Int // 0 = Sunday ... 6 = Saturday
+  time            String // "HH:mm" local time
+  timezone        String         @default("Europe/Rome")
+  active          Boolean        @default(true)
+  createdAt       DateTime       @default(now())
+
+  @@index([brandId, active])
+}
+
+enum JobStatus {
+  queued
+  running
+  succeeded
+  failed
+  dead
+  canceled
+}
+
+model Job {
+  id          String    @id @default(cuid())
+  type        String
+  payload     Json      @default("{}")
+  status      JobStatus @default(queued)
+  runAt       DateTime  @default(now())
+  priority    Int       @default(0)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(5)
+  lockedAt    DateTime?
+  lockedBy    String?
+  lastError   String?
+  dedupeKey   String?   @unique
+  brandId     String?
+  brand       Brand?    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  result      Json?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  finishedAt  DateTime?
+
+  @@index([status, runAt, priority])
+  @@index([type, status])
+}
+
+// ---------------------------------------------------------------------------
+// Webhooks, inbox, comments, reviews
+// ---------------------------------------------------------------------------
+
+model WebhookEvent {
+  id              String    @id @default(cuid())
+  provider        String
+  providerEventId String
+  eventType       String?
+  headers         Json      @default("{}")
+  payload         Json
+  signatureValid  Boolean   @default(false)
+  status          String    @default("received") // received | processed | ignored | failed
+  error           String?
+  receivedAt      DateTime  @default(now())
+  processedAt     DateTime?
+
+  @@unique([provider, providerEventId])
+  @@index([status, receivedAt])
+}
+
+model InboxThread {
+  id               String        @id @default(cuid())
+  brandId          String
+  brand            Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  socialAccountId  String
+  socialAccount    SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  provider         String
+  externalThreadId String
+  participantId    String?
+  participantName  String?
+  participantUrl   String?
+  lastMessageAt    DateTime?
+  lastMessageText  String?
+  unreadCount      Int           @default(0)
+  status           String        @default("open") // open | archived
+  tags             String[]      @default([])
+  notes            String?
+  syncCursor       String?
+  metadata         Json          @default("{}")
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  messages InboxMessage[]
+
+  @@unique([socialAccountId, externalThreadId])
+  @@index([brandId, lastMessageAt])
+}
+
+model InboxMessage {
+  id                String      @id @default(cuid())
+  threadId          String
+  thread            InboxThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  externalMessageId String
+  direction         String // inbound | outbound
+  body              String?
+  attachments       Json        @default("[]")
+  senderName        String?
+  sentAt            DateTime
+  deliveryStatus    String? // sent | delivered | read | failed
+  metadata          Json        @default("{}")
+  createdAt         DateTime    @default(now())
+
+  @@unique([threadId, externalMessageId])
+}
+
+model Comment {
+  id                String        @id @default(cuid())
+  brandId           String
+  brand             Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  socialAccountId   String
+  socialAccount     SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  provider          String
+  externalPostId    String
+  externalCommentId String
+  parentExternalId  String?
+  authorId          String?
+  authorName        String?
+  body              String
+  isOwner           Boolean       @default(false)
+  hidden            Boolean       @default(false)
+  repliedAt         DateTime?
+  remoteCreatedAt   DateTime
+  metadata          Json          @default("{}")
+  createdAt         DateTime      @default(now())
+
+  @@unique([socialAccountId, externalCommentId])
+  @@index([brandId, remoteCreatedAt])
+}
+
+model Review {
+  id               String        @id @default(cuid())
+  brandId          String
+  brand            Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  socialAccountId  String
+  socialAccount    SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  provider         String
+  externalReviewId String
+  rating           Int?
+  authorName       String?
+  body             String?
+  replyBody        String?
+  repliedAt        DateTime?
+  remoteCreatedAt  DateTime
+  metadata         Json          @default("{}")
+
+  @@unique([socialAccountId, externalReviewId])
+}
+
+// ---------------------------------------------------------------------------
+// Analytics (null = unsupported/unavailable; never coerced to zero)
+// ---------------------------------------------------------------------------
+
+model AnalyticsMetric {
+  id              String        @id @default(cuid())
+  brandId         String
+  brand           Brand         @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  socialAccountId String
+  socialAccount   SocialAccount @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  provider        String
+  scope           String // account | post
+  subjectId       String // external post id, or account external id
+  metric          String // impressions | reach | likes | followers | ...
+  granularity     String // lifetime | day | week | month
+  bucketTime      DateTime
+  breakdown       String        @default("")
+  value           Float?
+  source          String // native:<endpoint> | zernio:/v1/analytics
+  fetchedAt       DateTime      @default(now())
+  providerUpdatedAt DateTime?
+
+  @@unique([socialAccountId, scope, subjectId, metric, granularity, bucketTime, breakdown])
+  @@index([brandId, scope, metric, bucketTime])
+}
+
+// ---------------------------------------------------------------------------
+// Ads (read-only first; activation requires an explicit confirmation token)
+// ---------------------------------------------------------------------------
+
+model AdAccount {
+  id          String         @id @default(cuid())
+  brandId     String
+  brand       Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  provider    String // metaads | googleads | ...
+  backend     AdapterBackend @default(native)
+  externalId  String
+  name        String
+  currency    String?
+  timezone    String?
+  status      String         @default("connected")
+  readOnly    Boolean        @default(true)
+  spendCapMinor Int? // explicit ceiling in minor units, enforced before any activation
+  gatewayAccountId String?
+  metadata    Json           @default("{}")
+  syncedAt    DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  campaigns AdCampaign[]
+  drafts    AdCampaignDraft[]
+  tokenCiphertext String?
+  tokenIv         String?
+  tokenAuthTag    String?
+
+  @@unique([brandId, provider, externalId])
+}
+
+model AdCampaign {
+  id              String    @id @default(cuid())
+  adAccountId     String
+  adAccount       AdAccount @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  externalId      String
+  name            String
+  objective       String?
+  status          String
+  dailyBudgetMinor    Int?
+  lifetimeBudgetMinor Int?
+  currency        String?
+  startAt         DateTime?
+  endAt           DateTime?
+  metrics         Json      @default("{}")
+  raw             Json      @default("{}")
+  syncedAt        DateTime  @default(now())
+
+  @@unique([adAccountId, externalId])
+}
+
+model AdCampaignDraft {
+  id                String     @id @default(cuid())
+  brandId           String
+  brand             Brand      @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  adAccountId       String
+  adAccount         AdAccount  @relation(fields: [adAccountId], references: [id], onDelete: Cascade)
+  name              String
+  spec              Json // provider-specific campaign spec
+  status            String     @default("draft") // draft | validated | activating | active | failed
+  validation        Json?
+  confirmationToken String?
+  confirmationExpiresAt DateTime?
+  confirmedAt       DateTime?
+  remoteCampaignId  String?
+  lastError         String?
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Automations, contacts, notifications, audit, settings
+// ---------------------------------------------------------------------------
+
+model AutomationRule {
+  id          String   @id @default(cuid())
+  brandId     String
+  brand       Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  name        String
+  trigger     Json // { type, filters }
+  actions     Json // [{ type, params }]
+  enabled     Boolean  @default(false)
+  cooldownMinutes Int  @default(60)
+  perContactCap   Int  @default(3)
+  lastRunAt   DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  runs AutomationRun[]
+}
+
+model AutomationRun {
+  id        String         @id @default(cuid())
+  ruleId    String
+  rule      AutomationRule @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+  eventRef  String?
+  status    String // matched | skipped | executed | failed
+  log       Json           @default("[]")
+  createdAt DateTime       @default(now())
+
+  @@index([ruleId, createdAt])
+}
+
+model ContactRecord {
+  id          String   @id @default(cuid())
+  brandId     String
+  brand       Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  provider    String?
+  externalId  String?
+  name        String?
+  email       String?
+  phone       String?
+  source      String?
+  optInStatus String   @default("unknown") // unknown | opted_in | opted_out
+  optInAt     DateTime?
+  tags        String[] @default([])
+  notes       String?
+  lifecycle   String   @default("lead")
+  metadata    Json     @default("{}")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([brandId, email])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  brandId   String?
+  brand     Brand?   @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  level     String   @default("info") // info | warning | error
+  title     String
+  body      String?
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime @default(now())
+
+  @@index([readAt, createdAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  actor       User?    @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  brandId     String?
+  brand       Brand?   @relation(fields: [brandId], references: [id], onDelete: SetNull)
+  action      String
+  targetType  String?
+  targetId    String?
+  outcome     String   @default("ok") // ok | denied | error
+  details     Json     @default("{}")
+  ip          String?
+  createdAt   DateTime @default(now())
+
+  @@index([brandId, createdAt])
+  @@index([action, createdAt])
+}
+
+model SystemSetting {
+  key       String   @id
+  value     Json
+  encrypted Boolean  @default(false)
+  updatedAt DateTime @updatedAt
+}

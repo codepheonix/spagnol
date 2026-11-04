@@ -1,0 +1,40 @@
+{
+  "name": "spagnol-social-manager",
+  "private": true,
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=20.18"
+  },
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "dev:worker": "pnpm --filter worker dev",
+    "build": "pnpm --filter @sm/db generate && pnpm --filter web build",
+    "start": "pnpm --filter web start",
+    "worker": "pnpm --filter worker start",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "test": "pnpm -r --if-present test",
+    "test:e2e": "pnpm --filter web test:e2e",
+    "db:generate": "pnpm --filter @sm/db generate",
+    "db:migrate": "pnpm --filter @sm/db migrate:deploy",
+    "db:migrate:dev": "pnpm --filter @sm/db migrate:dev",
+    "db:seed": "pnpm --filter @sm/db seed",
+    "db:studio": "pnpm --filter @sm/db studio",
+    "smoke": "tsx scripts/smoke.ts",
+    "backup": "bash scripts/backup.sh",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@prisma/client",
+      "@prisma/engines",
+      "prisma",
+      "esbuild",
+      "sharp"
+    ]
+  }
+}
