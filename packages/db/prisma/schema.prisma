@@ -2,7 +2,8 @@
 // All timestamps are stored in UTC. Local IANA timezone identifiers are stored alongside where scheduling matters.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
