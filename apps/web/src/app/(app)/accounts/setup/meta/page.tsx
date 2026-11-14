@@ -38,8 +38,12 @@ export default async function MetaSetupPage() {
         <p>In <b>Facebook Login for Business → Settings</b> (left menu), under <b>Valid OAuth Redirect URIs</b>, add both lines exactly, then <b>Save changes</b>:</p>
         <p className="mono" style={{ userSelect: "all" }}>{fbCallback}</p>
         <p className="mono" style={{ userSelect: "all" }}>{igCallback}</p>
-        <h3>4 · Make the app Live</h3>
-        <p>In <b>App settings → Basic</b>, set <b>Privacy policy URL</b> to <span className="mono" style={{ userSelect: "all" }}>{base}/privacy</span> and <b>User data deletion</b> to the same address, choose a category, save, then switch the app from Development to <b>Live</b> (the <b>Publish</b> entry in the left menu). Posts made by an app left in Development mode can be visible only to the app&apos;s own team, so do this before the first real post.</p>
+        <h3>4 · Leave the app in Development mode for the first test</h3>
+        <p>Do not switch the app to Live yet. In Development mode Meta lets only people with a <b>role on the app</b> sign in, so:</p>
+        <ul>
+          <li>Sign in (when you press Connect) with the Facebook profile that created the app, or one added under <b>App roles → Roles</b> that has accepted the invitation. Being an admin of the Page is not enough on its own — that profile also needs the app role, <i>and</i> it must be allowed to publish on the Page.</li>
+          <li>Test posts made in Development mode are visible only to people with an app role. Check the first post while signed in to Facebook and Instagram as that same profile; other people will not see it until the app is Live.</li>
+        </ul>
         <h3>5 · Copy the two values here</h3>
         <p>Still in <b>App settings → Basic</b>: copy the <b>App ID</b>, press <b>Show</b> next to <b>App secret</b> and copy it. Paste both below.</p>
       </div>
@@ -47,10 +51,11 @@ export default async function MetaSetupPage() {
       <MetaSetupForm configured={{ meta: ready, configId: apps.META_LOGIN_CONFIG_ID, extended: apps.META_EXTENDED_SCOPES, instagram: apps.INSTAGRAM_APP_ID && apps.INSTAGRAM_APP_SECRET }} />
 
       <div className="card">
-        <h3 style={{ marginTop: 0 }}>What works without Meta&apos;s review, and what needs it</h3>
+        <h3 style={{ marginTop: 0 }}>Development mode, Live mode, and clients</h3>
         <table><tbody>
-          <tr><td><b>Your own Pages and Instagram accounts</b></td><td>Work right after this setup (Standard Access). You are the app&apos;s admin, so no App Review is needed.</td></tr>
-          <tr><td><b>Clients signing in with their own Facebook</b></td><td>Needs <b>Advanced Access</b> for each permission, granted through <b>App Review</b> plus <b>Business Verification</b>: <span className="mono">pages_show_list, pages_manage_posts, pages_read_engagement, business_management, instagram_basic, instagram_content_publish</span>. Until then a client can only be connected if they are added under <b>App roles</b> in the Meta app, or if you are an admin of their Page.</td></tr>
+          <tr><td><b>First test, your own Pages and Instagram accounts</b></td><td>Works in Development mode with no review, as long as the Facebook profile signing in has a role on the app. Posts are visible only to people with an app role.</td></tr>
+          <tr><td><b>Posts visible to everyone</b></td><td>The app has to be <b>Live</b>. Meta says to switch only once testing is finished and App Review is done, because in Live mode only permissions approved through App Review can be requested. Before switching, set <b>Privacy policy URL</b> and <b>User data deletion</b> in <b>App settings → Basic</b> to <span className="mono" style={{ userSelect: "all" }}>{base}/privacy</span>.</td></tr>
+          <tr><td><b>Clients signing in with their own Facebook</b></td><td>Needs <b>Advanced Access</b> for each permission, granted through <b>App Review</b> plus <b>Business Verification</b>: <span className="mono">pages_show_list, pages_manage_posts, pages_read_engagement, business_management, instagram_basic, instagram_content_publish</span>. Until then a client can only be connected if their Facebook profile is added under <b>App roles</b> in the Meta app.</td></tr>
           <tr><td><b>If Meta&apos;s sign-in complains about a configuration</b></td><td>Create one under <b>Facebook Login for Business → Configurations</b> (User access token; tick the permissions above) and paste its ID in the optional settings.</td></tr>
         </tbody></table>
         <p className="small muted">Graph API version pinned by this app: {META_GRAPH_VERSION}. Meta renames dashboard screens from time to time; the names above follow Meta&apos;s current developer documentation.</p>

@@ -23,9 +23,11 @@ about ten minutes, and is done once for all brands.
 7. **Facebook Login for Business → Settings → Valid OAuth Redirect URIs**:
    - `https://spagnol-social-manager.vercel.app/api/oauth/facebook/callback`
    - `https://spagnol-social-manager.vercel.app/api/oauth/instagram/callback`
-8. **App settings → Basic**: Privacy policy URL and User data deletion →
-   `https://spagnol-social-manager.vercel.app/privacy`; pick a category; then set the app **Live**
-   (Publish). Posts made by an app in Development mode can be visible only to people with a role on the app.
+8. **Leave the app in Development mode for the first test.** Only people with a role on the app can
+   sign in, so press Connect with the Facebook profile that created the app (or one added under
+   App roles that accepted the invitation) and that may publish on the Page — Page access alone does
+   not give an app role. Test posts made in Development mode are visible only to people with an app
+   role: verify the first post while signed in as that profile.
 9. **App settings → Basic**: copy **App ID** and **App secret** into the form on `/accounts/setup/meta`.
    The pair is checked with Meta (app access token) and stored encrypted.
 
@@ -37,15 +39,18 @@ about ten minutes, and is done once for all brands.
 | Comments + insights | `pages_read_user_content`, `pages_manage_engagement`, `read_insights`, `instagram_manage_comments`, `instagram_manage_insights` | only after adding them in Meta **and** ticking the option in the setup page (a permission the Meta app does not have makes Meta reject the whole sign-in) |
 | Ads (not built yet) | `ads_read`, then `ads_management` | milestone 5 |
 
-## Own accounts vs. clients
-- **Own Pages / Instagram accounts**: Standard Access — works as soon as the app exists, because the
-  person signing in is an admin of the app.
-- **Clients signing in with their own Facebook**: each permission above needs **Advanced Access**,
-  which Meta grants through **App Review** (screen recording + description per permission) and
-  **Business Verification**. Until then a client can be connected only if they are added under
-  **App roles**, or if the app admin is also an admin of the client's Page.
-- Not built yet: a sign-in link a client can open without an account in this app (today the owner
-  must be signed in to this app when the connection is started).
+## Development mode, Live mode, clients
+Source: <https://developers.facebook.com/documentation/development/build-and-test/app-modes>
+- **Development mode (first test, own accounts)**: works with no review for people with an app role.
+  Data created (test posts) is visible only to role users.
+- **Live mode (posts visible to everyone)**: Meta says to switch only after testing and App Review,
+  because in Live mode only permissions approved through App Review can be requested. Before
+  switching, set Privacy policy URL and User data deletion to
+  `https://spagnol-social-manager.vercel.app/privacy`.
+- **Clients signing in with their own Facebook**: each permission needs **Advanced Access**
+  (**App Review** + **Business Verification**). Until then a client can be connected only if their
+  Facebook profile is added under **App roles**.
+- Not built yet: a sign-in link a client can open without an account in this app.
 
 ## Verification status
 Nothing here is `LIVE_VERIFIED`. The flow has been exercised end to end against a stand-in Graph
