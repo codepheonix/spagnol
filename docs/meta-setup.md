@@ -52,6 +52,13 @@ Source: <https://developers.facebook.com/documentation/development/build-and-tes
   Facebook profile is added under **App roles**.
 - Not built yet: a sign-in link a client can open without an account in this app.
 
+## Comment → DM (private replies) and webhooks
+See `docs/meta-comment-dm.md`: permissions to add (`instagram_manage_comments`, `pages_manage_metadata`,
+`pages_messaging`, …), the one-time **Reconnect** that grants them, the webhook callback
+`https://spagnol-social-manager.vercel.app/api/webhooks/meta` + verify token (shown on the setup page),
+the Development-mode test with an Instagram Tester account, and the App Review step live `comments`
+webhooks require. The per-minute poll keeps the rule working before that approval.
+
 ## Verification status
 Nothing here is `LIVE_VERIFIED`. The flow has been exercised end to end against a stand-in Graph
 server (`packages/core/src/meta-flow.test.ts`) and in a browser walkthrough; the first real

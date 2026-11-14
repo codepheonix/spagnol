@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { appUrl, providerAppStatus } from "@sm/core";
+import { appUrl, getOrCreateWebhookVerifyToken, providerAppStatus } from "@sm/core";
 import { META_GRAPH_VERSION } from "@sm/integrations";
 import { requireUser } from "@/lib/auth";
 import { MetaSetupForm } from "@/components/Connections";
@@ -12,6 +12,8 @@ export default async function MetaSetupPage() {
   const fbCallback = `${base}/api/oauth/facebook/callback`;
   const igCallback = `${base}/api/oauth/instagram/callback`;
   const ready = apps.META_APP_ID && apps.META_APP_SECRET;
+  const webhookUrl = `${base}/api/webhooks/meta`;
+  const verifyToken = await getOrCreateWebhookVerifyToken();
   return (
     <div style={{ maxWidth: 860 }}>
       <p className="small"><Link href="/accounts">← Connections</Link></p>
@@ -44,7 +46,19 @@ export default async function MetaSetupPage() {
           <li>Sign in (when you press Connect) with the Facebook profile that created the app, or one added under <b>App roles → Roles</b> that has accepted the invitation. Being an admin of the Page is not enough on its own — that profile also needs the app role, <i>and</i> it must be allowed to publish on the Page.</li>
           <li>Test posts made in Development mode are visible only to people with an app role. Check the first post while signed in to Facebook and Instagram as that same profile; other people will not see it until the app is Live.</li>
         </ul>
-        <h3>5 · Copy the two values here</h3>
+        <h3>5 · Comment → DM (optional now, needed for the Automations rule)</h3>
+        <p>Private replies and comment events need the comments permissions, which are <b>not</b> in the publishing set. Add them in Meta, then tick <b>Request comments + insights permissions</b> below and press <b>Reconnect</b> on the Instagram/Facebook row in Connections (the sign-in has to be repeated so Meta grants the new permissions).</p>
+        <ul>
+          <li><b>Manage messaging and content on Instagram → Customize → Permissions</b>: add <span className="mono">instagram_manage_comments</span> (private replies and comment webhooks) — and <span className="mono">instagram_manage_messages</span> if you also want to read DMs later.</li>
+          <li><b>Manage everything on your Page → Customize → Permissions</b>: add <span className="mono">pages_manage_metadata</span> (webhook subscription), <span className="mono">pages_read_user_content</span>, <span className="mono">pages_manage_engagement</span> and <span className="mono">pages_messaging</span> (Facebook private replies).</li>
+          <li>If the account was connected with <b>Instagram login</b> instead (no Page): in that app add <span className="mono">instagram_business_manage_comments</span> and <span className="mono">instagram_business_manage_messages</span>.</li>
+        </ul>
+        <p><b>Webhooks</b> (so Meta pushes new comments to this app): Dashboard → <b>Webhooks</b> (or <b>Manage messaging and content on Instagram → Customize → Webhooks</b>) → choose object <b>Instagram</b> → <b>Subscribe to this object</b>:</p>
+        <p className="mono small" style={{ userSelect: "all" }}>Callback URL: {webhookUrl}</p>
+        <p className="mono small" style={{ userSelect: "all" }}>Verify token: {verifyToken}</p>
+        <p>Then press <b>Subscribe</b> on the field <span className="mono">comments</span>. Repeat for object <b>Page</b> with the field <span className="mono">feed</span> (Facebook comments). After that, on <b>Automations</b>, press <b>Subscribe at Meta</b> next to the account (this registers the Page / Instagram account itself). Meta signs every delivery with the App secret and this app rejects anything unsigned.</p>
+        <p className="small muted">Meta only sends live <span className="mono">comments</span> notifications to apps that are <b>Live</b> and hold <b>Advanced Access</b> to the comments permission (App Review). Until then the dashboard&apos;s <b>Test</b> button sends a sample to the URL above, and this app polls the watched posts every minute with your own token, so the rule works in Development mode for your own accounts.</p>
+        <h3>6 · Copy the two values here</h3>
         <p>Still in <b>App settings → Basic</b>: copy the <b>App ID</b>, press <b>Show</b> next to <b>App secret</b> and copy it. Paste both below.</p>
       </div>
 

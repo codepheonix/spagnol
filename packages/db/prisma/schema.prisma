@@ -71,6 +71,7 @@ model Brand {
   adAccounts     AdAccount[]
   adDrafts       AdCampaignDraft[]
   automations    AutomationRule[]
+  privateReplies PrivateReply[]
   contacts       ContactRecord[]
   notifications  Notification[]
   jobs           Job[]
@@ -126,6 +127,7 @@ model SocialAccount {
   comments     Comment[]
   reviews      Review[]
   analytics    AnalyticsMetric[]
+  privateReplies PrivateReply[]
 
   @@unique([brandId, provider, externalAccountId, backend])
   @@index([brandId, provider])
@@ -581,6 +583,7 @@ model AutomationRule {
   updatedAt   DateTime @updatedAt
 
   runs AutomationRun[]
+  privateReplies PrivateReply[]
 }
 
 model AutomationRun {
@@ -593,6 +596,45 @@ model AutomationRun {
   createdAt DateTime       @default(now())
 
   @@index([ruleId, createdAt])
+}
+
+/**
+ * Exactly-once ledger for Comment → DM: one row per (account, comment). The unique key is what
+ * guarantees a comment delivered twice by Meta (or seen by both the webhook and the poll) can only
+ * ever produce one private reply. Status: matched → queued → sending → sent | failed | uncertain;
+ * `skipped` = watched post but no keyword match (so "unrelated comment, no DM" is visible).
+ */
+model PrivateReply {
+  id                String         @id @default(cuid())
+  brandId           String
+  brand             Brand          @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  socialAccountId   String
+  socialAccount     SocialAccount  @relation(fields: [socialAccountId], references: [id], onDelete: Cascade)
+  ruleId            String?
+  rule              AutomationRule? @relation(fields: [ruleId], references: [id], onDelete: SetNull)
+  provider          String // instagram | facebook
+  externalPostId    String
+  externalCommentId String
+  commentText       String?
+  authorId          String?
+  authorName        String?
+  source            String         @default("webhook") // webhook | poll | manual
+  keyword           String?
+  replyText         String?
+  status            String         @default("matched") // matched | skipped | queued | sending | sent | failed | uncertain
+  error             String?
+  errorCategory     String?
+  providerMessageId String?
+  providerRecipientId String?
+  attempts          Int            @default(0)
+  commentCreatedAt  DateTime?
+  sentAt            DateTime?
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+
+  @@unique([socialAccountId, externalCommentId])
+  @@index([brandId, createdAt])
+  @@index([status, updatedAt])
 }
 
 model ContactRecord {

@@ -365,6 +365,23 @@ export interface SocialAdapter {
   replyComment?(ctx: AccountContext, input: { externalPostId: string; externalCommentId: string; body: string }): Promise<{ externalCommentId: string }>;
   fetchInbox?(ctx: AccountContext, cursor?: string | null): Promise<InboxPage>;
   sendMessage?(ctx: AccountContext, input: { externalThreadId: string; body: string }): Promise<{ externalMessageId: string }>;
+
+  // --- Comment → DM (private replies) and webhooks ---------------------------------
+  /** Recent posts of the account, for pickers (id + label + link). */
+  listRecentPosts?(ctx: AccountContext, limit?: number): Promise<RemotePostSummary[]>;
+  /** Sends the provider's one-time private reply to a comment's author. */
+  sendPrivateReply?(ctx: AccountContext, input: { externalCommentId: string; text: string }): Promise<{ providerMessageId: string; providerRecipientId?: string | null }>;
+  /** Subscribes this account to the app's webhook fields (comments, feed…). */
+  subscribeWebhooks?(ctx: AccountContext): Promise<{ subscribedFields: string[] }>;
+}
+
+export interface RemotePostSummary {
+  externalPostId: string;
+  label: string;
+  url?: string | null;
+  createdAt?: Date | null;
+  mediaType?: string | null;
+  thumbnailUrl?: string | null;
 }
 
 export function unsupported(capabilities: Capability[], reason?: string): CapabilityNote[] {

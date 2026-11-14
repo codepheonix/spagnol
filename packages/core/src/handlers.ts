@@ -8,6 +8,7 @@ import { syncComments, syncInbox } from "./inbox";
 import { processWebhookEventJob } from "./webhooks";
 import { cleanupOrphanMedia } from "./media";
 import { syncAdAccounts } from "./ads";
+import { ensurePollingArmed, pollPrivateReplyRulesJob, sendPrivateReplyJob } from "./private-replies";
 
 let registered = false;
 
@@ -36,6 +37,8 @@ export function registerAllHandlers(): void {
     return processWebhookEventJob(p.provider, p.providerEventId);
   });
   registerJobHandler("cleanup_media", async () => ({ removed: await cleanupOrphanMedia() }));
+  registerJobHandler("send_private_reply", async (job) => sendPrivateReplyJob(String((job.payload as { privateReplyId: string }).privateReplyId), job.attempts));
+  registerJobHandler("poll_private_reply_rules", async () => pollPrivateReplyRulesJob());
 
   /** Periodic fan-out: health + analytics + inbox for every connected account; also re-arms itself. */
   registerJobHandler("periodic_sync", async (job) => {
@@ -64,6 +67,8 @@ export function registerAllHandlers(): void {
         await rollupPostStatus(t.postId);
       } else await enqueue("publish_target", { postTargetId: t.id }, { dedupeKey: `publish:${t.id}`, maxAttempts: 6, priority: 10, brandId: t.post.brandId });
     }
+    // Comment → DM poll (one job per minute while any rule is on); re-armed here in case it ever stopped.
+    if (await prisma.automationRule.count({ where: { enabled: true } })) await ensurePollingArmed();
     const interval = Number((job.payload as { intervalMinutes?: number }).intervalMinutes ?? 60);
     await enqueue("periodic_sync", { intervalMinutes: interval }, { runAt: new Date(Date.now() + interval * 60_000), dedupeKey: `periodic_sync:${hour + 1}`, once: true });
     // Housekeeping: finished job rows and used sign-in states are only history after a week.

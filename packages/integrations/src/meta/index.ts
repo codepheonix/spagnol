@@ -28,6 +28,7 @@ import {
   type PublishResult,
   type PublishStatus,
   type RemoteAccount,
+  type RemotePostSummary,
   type SocialAdapter,
   type TargetPost,
   type ValidationIssue,
@@ -53,11 +54,11 @@ const igTokenUrl = () => `${trim(process.env.INSTAGRAM_API_BASE ?? "https://api.
  * switched them on in the in-app Meta setup after adding them in Meta.
  */
 export const META_PAGE_SCOPES = ["pages_show_list", "pages_manage_posts", "pages_read_engagement", "business_management"];
-export const META_PAGE_SCOPES_EXTENDED = ["pages_read_user_content", "pages_manage_engagement", "read_insights"];
+export const META_PAGE_SCOPES_EXTENDED = ["pages_read_user_content", "pages_manage_engagement", "read_insights", "pages_manage_metadata", "pages_messaging"];
 export const META_IG_VIA_FACEBOOK_SCOPES = ["instagram_basic", "instagram_content_publish"];
 export const META_IG_VIA_FACEBOOK_SCOPES_EXTENDED = ["instagram_manage_comments", "instagram_manage_insights"];
 export const INSTAGRAM_LOGIN_SCOPES = ["instagram_business_basic", "instagram_business_content_publish"];
-export const INSTAGRAM_LOGIN_SCOPES_EXTENDED = ["instagram_business_manage_comments", "instagram_business_manage_insights"];
+export const INSTAGRAM_LOGIN_SCOPES_EXTENDED = ["instagram_business_manage_comments", "instagram_business_manage_insights", "instagram_business_manage_messages"];
 
 const extended = (app: Record<string, string> | undefined) => (app?.META_EXTENDED_SCOPES ?? process.env.META_EXTENDED_SCOPES) === "1";
 
@@ -102,6 +103,43 @@ async function graph<T>(path: string, opts: { method?: "GET" | "POST" | "DELETE"
   if (e?.code === 1 || e?.code === 2) throw new ProviderError(msg, { category: "provider_error", retryable: true, providerCode: e.code, providerRequestId: traceId });
   if (e?.code === 100) throw new ProviderError(msg, { category: "validation", retryable: false, providerCode: e.code, providerRequestId: traceId });
   throw classifyHttpError(res, msg, traceId);
+}
+
+/** POST with a JSON body and a Bearer token (the Messenger Platform endpoints expect this form). */
+async function graphJson<T>(path: string, opts: { token: string; base?: string; json: unknown; timeoutMs?: number }): Promise<T> {
+  const url = `${opts.base ?? fbGraphBase()}${path}`;
+  const res = await http<T & GraphError>(url, { method: "POST", headers: { authorization: `Bearer ${opts.token}` }, json: opts.json, timeoutMs: opts.timeoutMs ?? 30_000 });
+  if (res.status >= 200 && res.status < 300 && !res.data?.error) return res.data;
+  const e = res.data?.error;
+  const msg = `Meta Graph ${path}: ${e?.message ?? res.text.slice(0, 200)} (code ${e?.code ?? res.status}${e?.error_subcode ? "/" + e.error_subcode : ""})`;
+  const traceId = e?.fbtrace_id;
+  if (e?.code === 190 || e?.code === 102) throw new ProviderError(msg, { category: "auth_expired", retryable: false, providerCode: e.code, providerRequestId: traceId });
+  if (e?.code === 10 || e?.code === 200 || (e?.code && e.code >= 200 && e.code <= 299)) throw new ProviderError(msg, { category: "permission", retryable: false, providerCode: e.code, providerRequestId: traceId });
+  if (e?.code === 4 || e?.code === 17 || e?.code === 32 || e?.code === 613) throw new ProviderError(msg, { category: "rate_limited", retryable: true, retryAfterSeconds: 900, providerCode: e.code, providerRequestId: traceId });
+  if (e?.code === 1 || e?.code === 2) throw new ProviderError(msg, { category: "provider_error", retryable: true, providerCode: e.code, providerRequestId: traceId });
+  if (e?.code === 100) throw new ProviderError(msg, { category: "validation", retryable: false, providerCode: e.code, providerRequestId: traceId });
+  throw classifyHttpError(res, msg, traceId);
+}
+
+/**
+ * Private reply to a comment (Messenger Platform): POST /{id}/messages with recipient.comment_id.
+ * Meta allows exactly one such message per comment, within 7 days of the comment. The caller
+ * (core) keeps the exactly-once ledger; this function only talks to the API.
+ *   Instagram via Instagram Login:  graph.instagram.com/{ig-user-id}/messages, Instagram user token
+ *   Instagram via Facebook Login:   graph.facebook.com/{ig-user-id}/messages, Page token
+ *   Facebook Page:                  graph.facebook.com/{page-id}/messages, Page token
+ */
+async function privateReply(auth: { token: string; base: string }, subjectId: string, commentId: string, text: string) {
+  const r = await graphJson<{ recipient_id?: string; message_id?: string; id?: string }>(`/${subjectId}/messages`, { ...auth, json: { recipient: { comment_id: commentId }, message: { text } } });
+  const providerMessageId = r.message_id ?? r.id;
+  if (!providerMessageId) throw new ProviderError("Meta accepted the request but returned no message id.", { category: "provider_error", retryable: false });
+  return { providerMessageId, providerRecipientId: r.recipient_id ?? null };
+}
+
+async function subscribeFields(auth: { token: string; base: string }, subjectId: string, fields: string[]): Promise<{ subscribedFields: string[] }> {
+  const r = await graph<{ success?: boolean }>(`/${subjectId}/subscribed_apps`, { method: "POST", ...auth, params: { subscribed_fields: fields.join(",") } });
+  if (r.success === false) throw new ProviderError("Meta did not confirm the webhook subscription.", { category: "provider_error", retryable: true });
+  return { subscribedFields: fields };
 }
 
 /** Confirms an app id/secret pair with Meta (app access token) and returns the app's name. */
@@ -431,6 +469,18 @@ export const facebookAdapter: SocialAdapter = {
     }
     return { comments, nextCursor: null };
   },
+  async listRecentPosts(ctx, limit = 25): Promise<RemotePostSummary[]> {
+    const r = await graph<{ data?: Array<{ id: string; message?: string; story?: string; permalink_url?: string; created_time: string; full_picture?: string }> }>(`/${ctx.externalAccountId}/posts`, { token: pageToken(ctx), params: { fields: "id,message,story,permalink_url,created_time,full_picture", limit } });
+    return (r.data ?? []).map((p) => ({ externalPostId: p.id, label: (p.message ?? p.story ?? p.id).slice(0, 80), url: p.permalink_url ?? null, createdAt: new Date(p.created_time), thumbnailUrl: p.full_picture ?? null }));
+  },
+  async sendPrivateReply(ctx, input) {
+    return privateReply({ token: pageToken(ctx), base: fbGraphBase() }, ctx.externalAccountId, input.externalCommentId, input.text);
+  },
+  async subscribeWebhooks(ctx) {
+    // `feed` delivers Page post comments; the same Page subscription also lets Meta send the
+    // Instagram comments of the linked Instagram account to this app.
+    return subscribeFields({ token: pageToken(ctx), base: fbGraphBase() }, ctx.externalAccountId, ["feed"]);
+  },
   async replyComment(ctx, input) {
     const r = await graph<{ id: string }>(`/${input.externalCommentId}/comments`, { method: "POST", token: pageToken(ctx), params: { message: input.body } });
     return { externalCommentId: r.id };
@@ -653,6 +703,22 @@ export const instagramAdapter: SocialAdapter = {
       }
     }
     return { comments, nextCursor: null };
+  },
+  async listRecentPosts(ctx, limit = 25): Promise<RemotePostSummary[]> {
+    const r = await graph<{ data?: Array<{ id: string; caption?: string; permalink?: string; timestamp: string; media_type?: string; thumbnail_url?: string; media_url?: string }> }>(`/${ctx.externalAccountId}/media`, { ...igAuth(ctx), params: { fields: "id,caption,permalink,timestamp,media_type,thumbnail_url,media_url", limit } });
+    return (r.data ?? []).map((m) => ({ externalPostId: m.id, label: (m.caption ?? m.id).slice(0, 80), url: m.permalink ?? null, createdAt: new Date(m.timestamp), mediaType: m.media_type ?? null, thumbnailUrl: m.thumbnail_url ?? m.media_url ?? null }));
+  },
+  async sendPrivateReply(ctx, input) {
+    return privateReply(igAuth(ctx), ctx.externalAccountId, input.externalCommentId, input.text);
+  },
+  async subscribeWebhooks(ctx) {
+    const auth = igAuth(ctx);
+    // Instagram Login: the Instagram account itself subscribes (graph.instagram.com).
+    // Facebook Login: Meta routes Instagram webhooks through the linked Page, so the Page is subscribed.
+    if (typeof ctx.credentials.igUserToken === "string" && ctx.credentials.igUserToken) return subscribeFields(auth, ctx.externalAccountId, ["comments"]);
+    const pageId = String(ctx.credentials.pageId ?? ctx.metadata.pageId ?? "");
+    if (!pageId) throw new ProviderError("No linked Facebook Page id on this Instagram account; reconnect it.", { category: "validation", retryable: false });
+    return subscribeFields(auth, pageId, ["feed"]);
   },
   async replyComment(ctx, input) {
     const r = await graph<{ id: string }>(`/${input.externalCommentId}/replies`, { method: "POST", ...igAuth(ctx), params: { message: input.body } });

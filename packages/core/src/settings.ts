@@ -54,7 +54,7 @@ export async function getAiConfig(): Promise<{ apiKey: string; baseUrl: string; 
 // ---------------------------------------------------------------------------
 
 /** Names that may be stored through the in-app setup. Anything else is rejected. */
-export const PROVIDER_APP_KEYS = ["META_APP_ID", "META_APP_SECRET", "META_LOGIN_CONFIG_ID", "META_EXTENDED_SCOPES", "INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET"] as const;
+export const PROVIDER_APP_KEYS = ["META_APP_ID", "META_APP_SECRET", "META_LOGIN_CONFIG_ID", "META_EXTENDED_SCOPES", "INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET", "META_WEBHOOK_VERIFY_TOKEN"] as const;
 export type ProviderAppKey = (typeof PROVIDER_APP_KEYS)[number];
 
 /** In-app setup (encrypted in SystemSetting `app.<NAME>`) wins over the environment variable. */

@@ -79,13 +79,13 @@ export async function cancelJobsByDedupePrefix(prefix: string): Promise<number> 
   return r.count;
 }
 
-/** Claims up to `limit` due jobs atomically. */
+/** Claims up to `limit` due jobs atomically. Prisma stores `timestamp` columns in UTC, so the comparison is made in UTC whatever the session time zone. */
 export async function claimJobs(workerId: string, limit = 5): Promise<Job[]> {
   const rows = await prisma.$queryRaw<Job[]>`
-    UPDATE "Job" SET status = 'running', "lockedAt" = now(), "lockedBy" = ${workerId}, attempts = attempts + 1, "updatedAt" = now()
+    UPDATE "Job" SET status = 'running', "lockedAt" = (now() AT TIME ZONE 'UTC'), "lockedBy" = ${workerId}, attempts = attempts + 1, "updatedAt" = (now() AT TIME ZONE 'UTC')
     WHERE id IN (
       SELECT id FROM "Job"
-      WHERE status = 'queued' AND "runAt" <= now()
+      WHERE status = 'queued' AND "runAt" <= (now() AT TIME ZONE 'UTC')
       ORDER BY priority DESC, "runAt" ASC
       LIMIT ${limit}
       FOR UPDATE SKIP LOCKED

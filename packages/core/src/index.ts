@@ -11,4 +11,5 @@ export * from "./inbox";
 export * from "./webhooks";
 export * from "./ads";
 export * from "./ai";
+export * from "./private-replies";
 export * from "./handlers";
