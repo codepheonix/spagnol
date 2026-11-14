@@ -7,6 +7,7 @@ export async function syncAccountAnalytics(socialAccountId: string, days = 30): 
   if (account.status !== "connected") return { stored: 0 };
   const adapter = adapterFor(account);
   if (!adapter.fetchMetrics) return { stored: 0, unsupported: true };
+  if (((account.metadata as { capabilities?: Record<string, string> } | null)?.capabilities?.read_analytics ?? "supported") !== "supported") return { stored: 0, unsupported: true };
   const ctx = await buildAccountContext(account);
   const metrics = await adapter.fetchMetrics(ctx, { from: new Date(Date.now() - days * 86_400_000), to: new Date() });
   return { stored: await storeMetrics(account.brandId, account.id, account.provider, metrics) };

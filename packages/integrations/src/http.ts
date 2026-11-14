@@ -33,7 +33,11 @@ export async function http<T = unknown>(url: string, opts: HttpOptions = {}): Pr
     res = await fetch(url, { method: opts.method ?? (body ? "POST" : "GET"), headers, body, signal: controller.signal });
   } catch (err) {
     clearTimeout(timer);
-    throw new ProviderError(`Network error calling provider: ${(err as Error).message}`, { category: "network", retryable: true });
+    // Connection never established → the request certainly did not reach the provider. Anything
+    // else (timeout, reset mid-response) is uncertain: the provider may have accepted it.
+    const cause = (err as { cause?: { code?: string } }).cause?.code ?? "";
+    const notSent = ["ECONNREFUSED", "ENOTFOUND", "EAI_AGAIN", "UND_ERR_CONNECT_TIMEOUT"].includes(cause);
+    throw new ProviderError(`Network error calling provider: ${(err as Error).message}${cause ? ` (${cause})` : ""}`, { category: "network", retryable: true, notSent });
   }
   clearTimeout(timer);
   const text = await res.text();

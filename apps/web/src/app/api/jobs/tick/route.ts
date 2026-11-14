@@ -11,12 +11,13 @@ export const dynamic = "force-dynamic";
  * for up to ~4 minutes. An always-on worker (apps/worker) does the same without needing a pinger.
  */
 async function tick(req: Request) {
-  requireCronSecret(req);
+  await requireCronSecret(req);
   registerAllHandlers();
   const started = Date.now();
   const budgetMs = Number(new URL(req.url).searchParams.get("budgetMs") ?? 240_000);
   const workerId = `tick-${process.env.VERCEL_REGION ?? "local"}-${process.pid}`;
-  await enqueue("periodic_sync", { intervalMinutes: 60 }, { dedupeKey: `periodic_sync:${Math.floor(Date.now() / 3_600_000) + 1}`, runAt: new Date() });
+  // Hourly housekeeping, once per hour bucket no matter how often the tick fires (it fires every minute).
+  await enqueue("periodic_sync", { intervalMinutes: 60 }, { dedupeKey: `periodic_sync:${Math.floor(Date.now() / 3_600_000)}`, runAt: new Date(), once: true });
   let processed = 0;
   while (Date.now() - started < budgetMs) {
     const n = await processDueJobs(workerId, 5);

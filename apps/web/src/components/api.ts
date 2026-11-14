@@ -15,6 +15,11 @@ export async function api<T = unknown>(path: string, init?: RequestInit & { json
   } catch {
     data = { error: text };
   }
-  if (!res.ok) throw new Error((data as { error?: string })?.error ?? `HTTP ${res.status}`);
+  if (!res.ok) {
+    const err = new Error((data as { error?: string })?.error ?? `HTTP ${res.status}`) as Error & { code?: string; status?: number };
+    err.code = (data as { code?: string })?.code;
+    err.status = res.status;
+    throw err;
+  }
   return data as T;
 }

@@ -71,6 +71,16 @@ export function listDescriptors(): ProviderDescriptor[] {
   return out;
 }
 
+/** Environment-only check (core's providerAppStatus also looks at the encrypted in-app setup). */
 export function nativeEnvMissing(descriptor: ProviderDescriptor): string[] {
   return (descriptor.requiredEnv ?? []).filter((k) => !process.env[k]);
 }
+
+/** App credential names needed for a provider and sign-in route. */
+export function requiredAppKeys(descriptor: ProviderDescriptor, loginMethod?: string | null): string[] {
+  const m = loginMethod ? descriptor.loginMethods?.find((x) => x.id === loginMethod) : undefined;
+  return m ? m.requiredEnv : (descriptor.requiredEnv ?? []);
+}
+
+/** Optional app settings passed through to adapters when present. */
+export const OPTIONAL_APP_KEYS = ["META_LOGIN_CONFIG_ID", "META_EXTENDED_SCOPES"];

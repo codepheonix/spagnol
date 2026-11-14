@@ -49,12 +49,14 @@ export interface EnqueueOptions {
   maxAttempts?: number;
   priority?: number;
   brandId?: string;
+  /** With a dedupeKey: never run this key again once a row exists, whatever its status (time-bucketed keys). */
+  once?: boolean;
 }
 
 export async function enqueue(type: string, payload: Prisma.InputJsonValue, opts: EnqueueOptions = {}): Promise<Job> {
   if (opts.dedupeKey) {
     const existing = await prisma.job.findUnique({ where: { dedupeKey: opts.dedupeKey } });
-    if (existing && (existing.status === "queued" || existing.status === "running")) return existing;
+    if (existing && (opts.once || existing.status === "queued" || existing.status === "running")) return existing;
     if (existing) {
       // Re-use the row for a fresh run (e.g. manual retry) to keep the dedupe key unique.
       return prisma.job.update({

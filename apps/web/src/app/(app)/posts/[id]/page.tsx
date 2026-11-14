@@ -4,6 +4,7 @@ import { getPost, getAiConfig, formatInZone, AppError } from "@sm/core";
 import { requireUser, requireBrand } from "@/lib/auth";
 import { PostEditor } from "@/components/PostEditor";
 import { Action } from "@/components/Action";
+import { POST_LABEL, targetLabel } from "@/lib/labels";
 
 export default async function PostPage({ params }: { params: Promise<{ id: string }> }) {
   const user = await requireUser();
@@ -22,15 +23,16 @@ export default async function PostPage({ params }: { params: Promise<{ id: strin
   const editable = ["draft", "validated", "failed", "partial", "canceled"].includes(post.status);
   return (
     <div>
-      <h1><span className={`badge ${post.status}`}>{post.status}</span> Post</h1>
+      <h1><span className={`badge ${post.status}`}>{POST_LABEL[post.status] ?? post.status}</span> Post</h1>
+      {post.status === "partial" && <div className="msg info">Some accounts published and some did not. Fix the cause shown below, then press <b>Retry</b> on that account only — the ones already published are not sent again.</div>}
       {post.scheduledAt && <p className="small muted">Scheduled for {formatInZone(post.scheduledAt, post.scheduleTimezone ?? brand.timezone)} ({post.scheduleTimezone}) — UTC {post.scheduledAt.toISOString()}</p>}
       <div className="row">
         {["scheduled", "publishing", "draft", "validated"].includes(post.status) && <Action className="danger" path={`/api/posts/${id}/cancel`} label="Cancel" confirm="Cancel this post and its queued jobs?" />}
-        <Action path={`/api/posts/${id}/duplicate`} label="Duplicate" onDone={(d) => { window.location.href = `/posts/${(d as { post: { id: string } }).post.id}`; }} />
+        <Action path={`/api/posts/${id}/duplicate`} label="Duplicate" redirectToId={{ prefix: "/posts/", path: "post.id" }} />
       </div>
-      <h2>Targets</h2>
-      <table><thead><tr><th>Account</th><th>Status</th><th>Remote</th><th>Attempts</th><th>Error</th><th></th></tr></thead><tbody>
-        {post.targets.map((t) => (<tr key={t.id}><td>{t.socialAccount.displayName}<div className="small muted">{t.socialAccount.provider}/{t.socialAccount.backend}</div></td><td><span className={`badge ${t.status}`}>{t.status}</span></td><td className="small">{t.remoteUrl ? <a href={t.remoteUrl} target="_blank" rel="noreferrer">{t.remoteUrl.slice(0, 60)}</a> : t.remotePostId ? <span className="mono">{t.remotePostId}</span> : "—"}{t.publishedAt && <div className="muted">{formatInZone(t.publishedAt, brand.timezone)}</div>}</td><td>{t.attempts}</td><td className="small" style={{ color: "var(--err)" }}>{t.lastError}</td><td className="row">{["failed_retryable", "failed_permanent", "canceled", "needs_reconnect", "blocked"].includes(t.status) && <Action path={`/api/posts/${id}/retry/${t.id}`} label="Retry" />}{t.status === "published" && <Action className="danger" path={`/api/posts/${id}/targets/${t.id}/delete-remote`} label="Delete remotely" confirm="Delete this post on the network?" />}</td></tr>))}
+      <h2>Result per account</h2>
+      <table><thead><tr><th>Account</th><th>Status</th><th>Published post</th><th>Attempts</th><th>Details</th><th></th></tr></thead><tbody>
+        {post.targets.map((t) => (<tr key={t.id}><td>{t.socialAccount.displayName}<div className="small muted">{t.socialAccount.provider}/{t.socialAccount.backend}</div></td><td><span className={`badge ${t.status}`}>{targetLabel(t.status, t.errorCategory)}</span></td><td className="small">{t.remoteUrl ? <a href={t.remoteUrl} target="_blank" rel="noreferrer">Open published post ↗</a> : t.remotePostId ? <span className="mono">{t.remotePostId}</span> : "—"}{t.publishedAt && <div className="muted">{formatInZone(t.publishedAt, brand.timezone)}</div>}</td><td>{t.attempts}</td><td className="small" style={{ color: t.status === "published" ? "var(--muted)" : "var(--err)" }}>{t.lastError}</td><td className="row">{["failed_permanent", "canceled", "needs_reconnect", "blocked"].includes(t.status) && <Action path={`/api/posts/${id}/retry/${t.id}`} label={`Retry ${t.socialAccount.provider} only`} />}{t.status === "published" && <Action className="danger" path={`/api/posts/${id}/targets/${t.id}/delete-remote`} label="Delete remotely" confirm="Delete this post on the network?" />}</td></tr>))}
       </tbody></table>
       {attempts.length > 0 && (<details><summary>Publish attempts ({attempts.length})</summary><table><thead><tr><th>Account</th><th>#</th><th>Status</th><th>Remote id</th><th>Request id</th><th>Error</th><th>When</th></tr></thead><tbody>{attempts.map((a) => <tr key={a.id}><td>{a.postTarget.socialAccount.displayName}</td><td>{a.attemptNumber}</td><td><span className={`badge ${a.status}`}>{a.status}</span></td><td className="mono">{a.remotePostId}</td><td className="mono">{a.providerRequestId}</td><td className="small">{a.error}</td><td className="small muted">{formatInZone(a.startedAt, brand.timezone)}</td></tr>)}</tbody></table></details>)}
       <h2>{editable ? "Edit" : "Content"}</h2>

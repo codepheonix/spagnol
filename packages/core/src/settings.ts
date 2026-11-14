@@ -48,3 +48,45 @@ export async function getAiConfig(): Promise<{ apiKey: string; baseUrl: string; 
   if (!apiKey) return null;
   return { apiKey, baseUrl: process.env.AI_API_BASE ?? "https://openrouter.ai/api/v1", model: ((await getSetting<string>("ai.model")) ?? process.env.AI_MODEL ?? "anthropic/claude-sonnet-4.5") as string };
 }
+
+// ---------------------------------------------------------------------------
+// Provider app credentials (the one-time registration each network asks of an app)
+// ---------------------------------------------------------------------------
+
+/** Names that may be stored through the in-app setup. Anything else is rejected. */
+export const PROVIDER_APP_KEYS = ["META_APP_ID", "META_APP_SECRET", "META_LOGIN_CONFIG_ID", "META_EXTENDED_SCOPES", "INSTAGRAM_APP_ID", "INSTAGRAM_APP_SECRET"] as const;
+export type ProviderAppKey = (typeof PROVIDER_APP_KEYS)[number];
+
+/** In-app setup (encrypted in SystemSetting `app.<NAME>`) wins over the environment variable. */
+export async function getProviderAppValue(name: string): Promise<string | null> {
+  const fromDb = await getSecretSetting(`app.${name}`).catch(() => null);
+  return fromDb ?? process.env[name] ?? null;
+}
+
+export async function setProviderAppValue(name: ProviderAppKey, value: string | null): Promise<void> {
+  if (!(PROVIDER_APP_KEYS as readonly string[]).includes(name)) throw new Error(`Unknown provider app setting ${name}`);
+  await setSecretSetting(`app.${name}`, value);
+}
+
+/** Resolves a set of app credential names; `missing` lists the ones configured nowhere. */
+export async function resolveProviderApp(required: string[], optional: string[] = []): Promise<{ values: Record<string, string>; missing: string[] }> {
+  const values: Record<string, string> = {};
+  const missing: string[] = [];
+  for (const k of required) {
+    const v = await getProviderAppValue(k);
+    if (v) values[k] = v;
+    else missing.push(k);
+  }
+  for (const k of optional) {
+    const v = await getProviderAppValue(k);
+    if (v) values[k] = v;
+  }
+  return { values, missing };
+}
+
+/** Which app credential names are configured (booleans only; values never leave the server). */
+export async function providerAppStatus(): Promise<Record<ProviderAppKey, boolean>> {
+  const out = {} as Record<ProviderAppKey, boolean>;
+  for (const k of PROVIDER_APP_KEYS) out[k] = Boolean(await getProviderAppValue(k));
+  return out;
+}

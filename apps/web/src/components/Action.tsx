@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { api } from "./api";
 
 /** Button that calls an API endpoint and refreshes the page; shows the server's error verbatim. */
-export function Action({ path, method = "POST", json, label, confirm: confirmText, className, onDone, redirect }: { path: string; method?: "POST" | "PATCH" | "DELETE"; json?: unknown; label: string; confirm?: string; className?: string; onDone?: (data: unknown) => void; redirect?: string }) {
+export function Action({ path, method = "POST", json, label, confirm: confirmText, className, onDone, redirect, redirectToId }: { path: string; method?: "POST" | "PATCH" | "DELETE"; json?: unknown; label: string; confirm?: string; className?: string; onDone?: (data: unknown) => void; redirect?: string; /** Server components cannot pass functions: `{ prefix: "/posts/", path: "post.id" }` navigates to prefix + data.post.id. */ redirectToId?: { prefix: string; path: string } }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const router = useRouter();
@@ -20,6 +20,10 @@ export function Action({ path, method = "POST", json, label, confirm: confirmTex
           try {
             const data = await api(path, { method, json });
             onDone?.(data);
+            if (redirectToId) {
+              const id = redirectToId.path.split(".").reduce<unknown>((o, k) => (o && typeof o === "object" ? (o as Record<string, unknown>)[k] : undefined), data);
+              if (typeof id === "string") router.push(redirectToId.prefix + id);
+            }
             if (redirect) router.push(redirect);
             router.refresh();
           } catch (e) {

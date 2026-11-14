@@ -1,3 +1,4 @@
+import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { ZodError, type ZodTypeAny, type z } from "zod";
 import { prisma, type Brand, type User } from "@sm/db";
@@ -67,10 +68,26 @@ export function handle(fn: (req: Request, ctx: { params: Promise<Record<string, 
   };
 }
 
-export function requireCronSecret(req: Request) {
+/**
+ * Job tick authentication. Accepts the CRON_SECRET (Vercel Cron, external pingers) or the token of
+ * the database scheduler: that token is generated inside Postgres and only its SHA-256 is stored
+ * in SystemSetting `jobs.tickTokenHash`, so the token itself never leaves the database.
+ */
+export async function requireCronSecret(req: Request) {
   const expected = process.env.CRON_SECRET;
   const auth = req.headers.get("authorization");
+  const bearer = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
   const q = new URL(req.url).searchParams.get("secret");
+  if (expected && (bearer === expected || q === expected)) return;
+  if (bearer) {
+    const row = await prisma.systemSetting.findUnique({ where: { key: "jobs.tickTokenHash" } });
+    const hash = typeof row?.value === "string" ? row.value : null;
+    if (hash && hash.length === 64) {
+      const got = createHash("sha256").update(bearer).digest();
+      const want = Buffer.from(hash, "hex");
+      if (got.length === want.length && timingSafeEqual(got, want)) return;
+    }
+  }
   if (!expected) throw new HttpError(500, "CRON_SECRET not configured.", "config");
-  if (auth !== `Bearer ${expected}` && q !== expected) throw new HttpError(401, "Bad cron secret.", "unauthenticated");
+  throw new HttpError(401, "Bad cron secret.", "unauthenticated");
 }

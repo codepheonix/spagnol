@@ -145,7 +145,10 @@ export async function schedulePost(userId: string, postId: string, opts: { sched
   if (!opts.now && runAt.getTime() < Date.now() - 60_000) throw new AppError("The scheduled time is in the past.", 400, "past_time");
   await prisma.post.update({ where: { id: postId }, data: { status: "scheduled", scheduledAt: runAt, scheduleTimezone: opts.scheduleTimezone ?? post.scheduleTimezone ?? "Europe/Rome" } });
   for (const t of okTargets) {
-    await prisma.postTarget.update({ where: { id: t.id }, data: { status: "queued", nextRetryAt: runAt, lastError: null } });
+    if (t.status === "published") continue; // a destination that already went out is never sent again
+    await prisma.postTarget.update({ where: { id: t.id }, data: { status: "queued", nextRetryAt: runAt, lastError: null, errorCategory: null } });
+    // Rescheduling moves the existing queued job instead of leaving it at the old time.
+    await prisma.job.updateMany({ where: { dedupeKey: `publish:${t.id}`, status: "queued" }, data: { runAt } });
     await enqueue("publish_target", { postTargetId: t.id }, { runAt, dedupeKey: `publish:${t.id}`, maxAttempts: 6, priority: 10, brandId: post.brandId });
   }
   await audit({ actorUserId: userId, brandId: post.brandId, action: opts.now ? "post.publish_now" : "post.schedule", targetType: "post", targetId: postId, details: { runAt: runAt.toISOString(), targets: okTargets.length } });
@@ -171,7 +174,11 @@ export async function retryTarget(userId: string, postId: string, targetId: stri
   const t = post.targets.find((x) => x.id === targetId);
   if (!t) throw new AppError("Target not found.", 404, "not_found");
   if (t.status === "published") throw new AppError("Already published.", 409, "already_published");
-  const updated = await prisma.postTarget.update({ where: { id: t.id }, data: { status: "queued", lastError: null, nextRetryAt: new Date() } });
+  if (["queued", "uploading", "processing"].includes(t.status)) throw new AppError("This destination is already being sent.", 409, "in_flight");
+  // Networks with no way to look a post up: the owner pressing Retry is the review. (Networks that
+  // can be checked — Facebook, Instagram — are still checked by the worker before anything is re-sent.)
+  if (!adapterFor(t.socialAccount).findRecentPost) await prisma.publishAttempt.updateMany({ where: { postTargetId: t.id, status: { in: ["started", "unknown"] } }, data: { status: "failed", error: "uncertain result; owner chose to send again", finishedAt: new Date() } });
+  const updated = await prisma.postTarget.update({ where: { id: t.id }, data: { status: "queued", lastError: null, errorCategory: null, nextRetryAt: new Date() } });
   await enqueue("publish_target", { postTargetId: t.id }, { dedupeKey: `publish:${t.id}`, maxAttempts: 6, priority: 10, brandId: post.brandId });
   await prisma.post.update({ where: { id: postId }, data: { status: "scheduled" } });
   await audit({ actorUserId: userId, brandId: post.brandId, action: "post.retry_target", targetType: "post_target", targetId: t.id });
@@ -216,14 +223,52 @@ export async function publishTargetJob(postTargetId: string): Promise<unknown> {
   // Reconcile first: an earlier attempt may have succeeded remotely before we recorded it.
   const prior = await prisma.publishAttempt.findFirst({ where: { postTargetId, remotePostId: { not: null } }, orderBy: { startedAt: "desc" } });
   if (prior?.remotePostId) {
-    await markPublished(target.id, post.id, prior.remotePostId, null, "reconciled from earlier attempt");
+    const url = (prior.responseSummary as { remoteUrl?: string | null } | null)?.remoteUrl ?? null;
+    await markPublished(target.id, post.id, prior.remotePostId, url, "reconciled from earlier attempt");
     return { reconciled: prior.remotePostId };
   }
 
   if (target.socialAccount.status !== "connected") {
-    await prisma.postTarget.update({ where: { id: target.id }, data: { status: "needs_reconnect", lastError: `account ${target.socialAccount.status}` } });
+    await prisma.postTarget.update({ where: { id: target.id }, data: { status: "needs_reconnect", lastError: `Reconnect ${target.socialAccount.displayName} (${target.socialAccount.status.replace("_", " ")}), then retry.`, errorCategory: "auth_expired" } });
     await rollupPostStatus(post.id);
     throw new PermanentJobError(`account ${target.socialAccount.status}`);
+  }
+
+  // An earlier send whose outcome is unknown (timeout, or the worker stopped mid-send): the network
+  // may already have the post. Look for it there BEFORE sending anything again.
+  const uncertain = await prisma.publishAttempt.findMany({ where: { postTargetId, status: { in: ["started", "unknown"] } }, orderBy: { startedAt: "asc" } });
+  if (uncertain.length) {
+    const lookupAdapter = adapterFor(target.socialAccount);
+    const ids = uncertain.map((a) => a.id);
+    if (lookupAdapter.findRecentPost) {
+      let found: { remotePostId: string; remoteUrl?: string | null } | null;
+      try {
+        found = await lookupAdapter.findRecentPost(await buildAccountContext(target.socialAccount), await targetPostFor(post, target), new Date(uncertain[0]!.startedAt.getTime() - 120_000));
+      } catch (err) {
+        // Cannot verify right now → do not send blindly; try the check again later.
+        const e = err as Error;
+        const authExpired = err instanceof ProviderError && err.options.category === "auth_expired";
+        await prisma.postTarget.update({ where: { id: target.id }, data: { status: authExpired ? "needs_reconnect" : "failed_retryable", errorCategory: authExpired ? "auth_expired" : "uncertain", lastError: `Checking publication: could not ask ${target.socialAccount.provider} whether the earlier send went through (${e.message.slice(0, 300)}). Nothing was re-sent.` } });
+        await rollupPostStatus(post.id);
+        if (authExpired) throw new PermanentJobError(e.message);
+        throw new RetryableJobError(`reconcile lookup failed: ${e.message}`, 120);
+      }
+      if (found) {
+        await prisma.publishAttempt.update({ where: { id: ids[ids.length - 1]! }, data: { status: "succeeded", remotePostId: found.remotePostId, responseSummary: { status: "published", remoteUrl: found.remoteUrl ?? null, reconciled: true } as object, finishedAt: new Date() } });
+        await prisma.publishAttempt.updateMany({ where: { id: { in: ids.slice(0, -1) } }, data: { status: "failed", error: "superseded: publication confirmed on a later check", finishedAt: new Date() } });
+        await markPublished(target.id, post.id, found.remotePostId, found.remoteUrl ?? null, "confirmed on the network after an interrupted send — not re-sent");
+        log.info({ remotePostId: found.remotePostId }, "uncertain send reconciled: already published");
+        return { reconciled: found.remotePostId };
+      }
+      await prisma.publishAttempt.updateMany({ where: { id: { in: ids } }, data: { status: "failed", error: "checked on the network: the earlier send did not publish", finishedAt: new Date() } });
+    } else if (target.socialAccount.backend === "native") {
+      // No way to check on this network and no idempotency key: a person decides whether to send again.
+      await prisma.postTarget.update({ where: { id: target.id }, data: { status: "failed_permanent", errorCategory: "uncertain", lastError: `The earlier send may or may not have gone through, and ${target.socialAccount.provider} offers no way to check. Look at the account; press Retry only if the post is not there.` } });
+      await rollupPostStatus(post.id);
+      await notify({ brandId: post.brandId, level: "warning", title: `Check ${target.socialAccount.displayName} before retrying`, body: "An interrupted send needs your review.", link: `/posts/${post.id}` });
+      throw new PermanentJobError("uncertain send needs review");
+    }
+    // Gateway backends (Zernio) dedupe on the idempotency key, so a repeat is safe there.
   }
 
   const attemptNumber = target.attempts + 1;
@@ -252,7 +297,9 @@ export async function publishTargetJob(postTargetId: string): Promise<unknown> {
   } catch (err) {
     const e = err as Error;
     const pe = err instanceof ProviderError ? err : null;
-    await prisma.publishAttempt.update({ where: { id: attempt.id }, data: { status: pe?.options.category === "network" ? "unknown" : "failed", error: e.message.slice(0, 2000), providerRequestId: pe?.options.providerRequestId ?? null, finishedAt: new Date() } });
+    // "unknown" = the request may have reached the provider (timeout / dropped connection).
+    const outcomeUnknown = pe?.options.category === "network" && !pe.options.notSent;
+    await prisma.publishAttempt.update({ where: { id: attempt.id }, data: { status: outcomeUnknown ? "unknown" : "failed", error: e.message.slice(0, 2000), providerRequestId: pe?.options.providerRequestId ?? null, finishedAt: new Date() } });
     const retryable = pe ? pe.options.retryable : true;
     const needsReconnect = pe?.options.category === "auth_expired";
     if (needsReconnect) {
@@ -261,7 +308,7 @@ export async function publishTargetJob(postTargetId: string): Promise<unknown> {
     }
     const exhausted = attemptNumber >= 6;
     const status = needsReconnect ? "needs_reconnect" : retryable && !exhausted ? "failed_retryable" : "failed_permanent";
-    await prisma.postTarget.update({ where: { id: target.id }, data: { status, lastError: e.message.slice(0, 2000), errorCategory: pe?.options.category ?? "unknown" } });
+    await prisma.postTarget.update({ where: { id: target.id }, data: { status, lastError: outcomeUnknown ? `Result uncertain (${e.message.slice(0, 300)}). Checking whether it was published before sending again.` : e.message.slice(0, 2000), errorCategory: outcomeUnknown ? "uncertain" : (pe?.options.category ?? "unknown") } });
     await rollupPostStatus(post.id);
     if (status === "failed_permanent") await notify({ brandId: post.brandId, level: "error", title: `Publishing failed on ${target.socialAccount.displayName}`, body: e.message, link: `/posts/${post.id}` });
     log.warn({ err: e.message, status }, "publish failed");

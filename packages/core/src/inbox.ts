@@ -7,6 +7,8 @@ export async function syncComments(socialAccountId: string): Promise<{ upserted:
   if (account.status !== "connected") return { upserted: 0 };
   const adapter = adapterFor(account);
   if (!adapter.fetchComments) return { upserted: 0, unsupported: true };
+  // Permission not granted for this account → skip quietly; the Connections page shows what is missing.
+  if (((account.metadata as { capabilities?: Record<string, string> } | null)?.capabilities?.read_comments ?? "supported") !== "supported") return { upserted: 0, unsupported: true };
   const ctx = await buildAccountContext(account);
   const page = await adapter.fetchComments(ctx, {});
   let n = 0;

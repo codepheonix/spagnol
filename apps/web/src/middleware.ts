@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { verifySessionToken } from "@sm/security/session";
 
-const PUBLIC = ["/login", "/setup", "/api/auth/login", "/api/auth/setup", "/api/health", "/api/webhooks", "/api/jobs/tick", "/api/oauth"];
+const PUBLIC = ["/login", "/setup", "/privacy", "/api/auth/login", "/api/auth/setup", "/api/health", "/api/webhooks", "/api/jobs/tick", "/api/oauth"];
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;

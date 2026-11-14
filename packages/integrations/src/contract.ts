@@ -109,11 +109,25 @@ export interface ProviderDescriptor {
   };
   implementationStatus: ImplementationStatus;
   docsUrl?: string;
-  /** Required env vars for this adapter to be usable at all. */
+  /**
+   * Provider app credentials this adapter needs (canonical names, e.g. META_APP_ID). Values come
+   * from the encrypted in-app setup (SystemSetting `app.<NAME>`) or, as a fallback, the environment.
+   */
   requiredEnv?: string[];
+  /** Alternative sign-in routes for the same provider (e.g. Instagram Login vs Facebook Login). */
+  loginMethods?: LoginMethod[];
+}
+
+export interface LoginMethod {
+  id: string;
+  label: string;
+  notes?: string;
+  requiredEnv: string[];
 }
 
 export interface RemoteAccount {
+  /** Set when one sign-in returns assets of another provider (Facebook Login → linked Instagram account). */
+  provider?: ProviderId;
   externalAccountId: string;
   accountType?: string;
   displayName: string;
@@ -143,6 +157,8 @@ export interface AccountContext {
   metadata: Record<string, unknown>;
   /** Decrypted credentials; must never be logged. */
   credentials: Record<string, unknown>;
+  /** Provider app credentials (app id/secret) resolved by core; needed for token refresh. */
+  app?: Record<string, string>;
   /** Gateway-level config (e.g. Zernio API key) when backend = zernio. */
   gateway?: { apiKey: string; baseUrl: string; profileId?: string; accountId?: string };
 }
@@ -294,6 +310,8 @@ export class ProviderError extends Error {
       providerCode?: string | number;
       providerRequestId?: string;
       status?: number;
+      /** Network errors only: true when the request certainly never reached the provider. */
+      notSent?: boolean;
     },
   ) {
     super(message);
@@ -314,6 +332,7 @@ export interface SocialAdapter {
     redirectUri: string;
     codeChallenge?: string;
     extra?: Record<string, string>;
+    app?: Record<string, string>;
   }): Promise<string>;
   exchangeAuthorizationCode?(input: {
     code: string;
@@ -321,6 +340,7 @@ export interface SocialAdapter {
     redirectUri: string;
     codeVerifier?: string;
     callbackParams: Record<string, string>;
+    app?: Record<string, string>;
   }): Promise<ConnectResult>;
   /** For providers whose documented auth is a bot token / app password. */
   connectWithCredentials?(input: Record<string, string>): Promise<ConnectResult>;
@@ -332,6 +352,11 @@ export interface SocialAdapter {
   validatePost(ctx: AccountContext, target: TargetPost): Promise<ValidationResult>;
   publish(ctx: AccountContext, target: TargetPost, idempotencyKey: string): Promise<PublishResult>;
   getPublishStatus?(ctx: AccountContext, remotePostId: string): Promise<PublishStatus>;
+  /**
+   * Reconciliation for uncertain sends (timeout / interrupted worker): looks on the provider for a
+   * post matching this target created at or after `since`. Returns null when none is found.
+   */
+  findRecentPost?(ctx: AccountContext, target: TargetPost, since: Date): Promise<{ remotePostId: string; remoteUrl?: string | null } | null>;
   deletePost?(ctx: AccountContext, remotePostId: string): Promise<void>;
 
   // --- Engagement & analytics ----------------------------------------------------

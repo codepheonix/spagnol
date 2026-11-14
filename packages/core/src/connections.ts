@@ -1,8 +1,8 @@
 import { prisma, type SocialAccount } from "@sm/db";
 import { createOAuthState, createPkcePair, decryptJson, encryptJson, type EncryptedBlob } from "@sm/security";
-import { getAdapter, hasNativeAdapter, isProviderId, nativeEnvMissing, ProviderError, ZernioClient, ZERNIO_PLATFORM_MAP, type AccountContext, type AdapterBackend, type ConnectResult, type ProviderId, type SocialAdapter } from "@sm/integrations";
+import { getAdapter, hasNativeAdapter, isProviderId, OPTIONAL_APP_KEYS, ProviderError, requiredAppKeys, ZernioClient, ZERNIO_PLATFORM_MAP, INSTAGRAM_LOGIN_SCOPES, META_IG_VIA_FACEBOOK_SCOPES, META_PAGE_SCOPES, type AccountContext, type AdapterBackend, type ConnectResult, type ProviderId, type SocialAdapter } from "@sm/integrations";
 import { audit, notify } from "./audit";
-import { getZernioConfig } from "./settings";
+import { getZernioConfig, resolveProviderApp } from "./settings";
 import { enqueue } from "./queue";
 
 export class AppError extends Error {
@@ -78,23 +78,62 @@ export function parseBackend(value: string | null | undefined): AdapterBackend {
   return "native";
 }
 
+export interface StartConnectionInput {
+  brandId: string;
+  userId: string;
+  provider: ProviderId;
+  backend: AdapterBackend;
+  options?: Record<string, string>;
+  /** Reconnect an existing account record (same identity) instead of adding a new one. */
+  reconnectAccountId?: string;
+}
+
+interface OAuthPayload {
+  userId?: string;
+  profileId?: string;
+  loginMethod?: string;
+  reconnectAccountId?: string;
+  /** Encrypted ConnectResult waiting for the owner to pick which assets to attach. */
+  pending?: EncryptedBlob | null;
+  requestedProvider?: string;
+}
+
 /** Step 1 of a connection: returns a URL to redirect the browser to (OAuth / gateway) or `null` for credential forms. */
-export async function startConnection(input: { brandId: string; userId: string; provider: ProviderId; backend: AdapterBackend; options?: Record<string, string> }): Promise<{ redirectUrl: string | null; descriptor: SocialAdapter["descriptor"] }> {
+export async function startConnection(input: StartConnectionInput): Promise<{ redirectUrl: string | null; descriptor: SocialAdapter["descriptor"] }> {
   const brand = await prisma.brand.findFirst({ where: { id: input.brandId, ownerId: input.userId, archivedAt: null } });
   if (!brand) throw new AppError("Brand not found.", 404, "not_found");
-  if (input.backend === "native" && !hasNativeAdapter(input.provider)) throw new AppError(`No native adapter for ${input.provider} yet — connect it through Zernio.`, 400, "native_not_implemented");
-  const adapter = getAdapter(input.provider, input.backend);
+  let backend = input.backend;
+  const options: Record<string, string> = { ...(input.options ?? {}) };
+  let reconnect: SocialAccount | null = null;
+  if (input.reconnectAccountId) {
+    reconnect = await prisma.socialAccount.findFirst({ where: { id: input.reconnectAccountId, brandId: brand.id, provider: input.provider } });
+    if (!reconnect) throw new AppError("Account not found for this brand.", 404, "not_found");
+    backend = reconnect.backend;
+    const lm = (reconnect.metadata as { loginMethod?: string } | null)?.loginMethod;
+    if (lm) options.loginMethod = lm;
+    options.reconnect = "1";
+  }
+  if (backend === "native" && !hasNativeAdapter(input.provider)) throw new AppError(`${input.provider} is not built yet in this app.`, 400, "native_not_implemented");
+  const adapter = getAdapter(input.provider, backend);
   const d = adapter.descriptor;
-  const missing = nativeEnvMissing(d);
-  if (missing.length) throw new AppError(`Missing provider app credentials: ${missing.join(", ")}. See docs/credential-register.md.`, 412, "missing_env");
   if (d.connect.kind === "credentials") return { redirectUrl: null, descriptor: d };
+  const loginMethod = d.loginMethods?.some((m) => m.id === options.loginMethod) ? options.loginMethod : d.loginMethods?.[0]?.id;
+  if (loginMethod) options.loginMethod = loginMethod;
+  else delete options.loginMethod;
+
+  let app: Record<string, string> | undefined;
+  if (backend === "native") {
+    const resolved = await resolveProviderApp(requiredAppKeys(d, loginMethod), OPTIONAL_APP_KEYS);
+    if (resolved.missing.length) throw new AppError(`One-time setup needed before this button can open the sign-in page: ${resolved.missing.join(", ")} not configured.`, 412, "provider_app_missing");
+    app = resolved.values;
+  }
 
   const state = createOAuthState();
   const redirectUri = `${appUrl()}/api/oauth/${input.provider}/callback`;
-  const extra: Record<string, string> = { ...(input.options ?? {}) };
+  const extra: Record<string, string> = { ...options };
   let codeVerifier: string | undefined;
-  const payload: Record<string, unknown> = {};
-  if (input.backend === "zernio") {
+  const payload: OAuthPayload = { userId: input.userId, loginMethod, reconnectAccountId: reconnect?.id, requestedProvider: input.provider };
+  if (backend === "zernio") {
     const z = await getZernioConfig();
     if (!z) throw new AppError("Zernio API key is not configured. Add it in Settings first.", 412, "zernio_not_configured");
     const client = new ZernioClient(z.apiKey, z.baseUrl);
@@ -108,44 +147,142 @@ export async function startConnection(input: { brandId: string; userId: string; 
     codeVerifier = pkce.verifier;
     extra.codeChallenge = pkce.challenge;
   }
-  await prisma.oAuthState.create({ data: { state, brandId: brand.id, provider: input.provider, backend: input.backend, codeVerifier, redirectUri, payload: payload as object, expiresAt: new Date(Date.now() + 15 * 60_000) } });
+  await prisma.oAuthState.create({ data: { state, brandId: brand.id, provider: input.provider, backend, codeVerifier, redirectUri, payload: payload as object, expiresAt: new Date(Date.now() + 15 * 60_000) } });
   if (!adapter.buildAuthorizationUrl) throw new AppError("Adapter cannot start OAuth.", 500, "adapter_error");
-  const url = await adapter.buildAuthorizationUrl({ brandId: brand.id, state, redirectUri, codeChallenge: extra.codeChallenge, extra });
-  await audit({ actorUserId: input.userId, brandId: brand.id, action: "connection.start", targetType: "provider", targetId: `${input.provider}:${input.backend}` });
+  const url = await adapter.buildAuthorizationUrl({ brandId: brand.id, state, redirectUri, codeChallenge: extra.codeChallenge, extra, app });
+  await audit({ actorUserId: input.userId, brandId: brand.id, action: reconnect ? "connection.reconnect_start" : "connection.start", targetType: "provider", targetId: `${input.provider}:${backend}${loginMethod ? `:${loginMethod}` : ""}` });
   return { redirectUrl: url, descriptor: d };
 }
 
-/** Step 2: provider redirected back. Verifies state exactly once, exchanges server-side, persists accounts. */
-export async function completeOAuthCallback(provider: ProviderId, params: Record<string, string>): Promise<{ brandId: string; accounts: SocialAccount[] }> {
+export interface CallbackOutcome {
+  brandId: string;
+  accounts: SocialAccount[];
+  /** Set when several assets were granted and the owner still has to choose which ones to attach. */
+  pendingState?: string;
+  reconnected?: boolean;
+}
+
+/** Step 2: provider redirected back. Verifies state exactly once, exchanges server-side, then persists or asks the owner to choose. */
+export async function completeOAuthCallback(provider: ProviderId, params: Record<string, string>): Promise<CallbackOutcome> {
   const state = params.state;
   if (!state) throw new AppError("Missing OAuth state.", 400, "oauth_state");
   const row = await prisma.oAuthState.findUnique({ where: { state } });
   if (!row || row.provider !== provider) throw new AppError("Unknown OAuth state (possible replay or mismatch).", 400, "oauth_state");
-  if (row.consumedAt) throw new AppError("This OAuth callback was already used.", 400, "oauth_replay");
-  if (row.expiresAt < new Date()) throw new AppError("OAuth state expired — start the connection again.", 400, "oauth_expired");
+  if (row.consumedAt) throw new AppError("This sign-in link was already used. Start the connection again.", 400, "oauth_replay");
+  if (row.expiresAt < new Date()) throw new AppError("The sign-in took longer than 15 minutes — start the connection again.", 400, "oauth_expired");
   // Anti-replay: consume atomically.
   const consumed = await prisma.oAuthState.updateMany({ where: { id: row.id, consumedAt: null }, data: { consumedAt: new Date() } });
-  if (consumed.count !== 1) throw new AppError("This OAuth callback was already used.", 400, "oauth_replay");
+  if (consumed.count !== 1) throw new AppError("This sign-in link was already used. Start the connection again.", 400, "oauth_replay");
 
+  const payload = (row.payload ?? {}) as OAuthPayload;
   const adapter = getAdapter(provider, row.backend);
   if (!adapter.exchangeAuthorizationCode) throw new AppError("Adapter cannot complete OAuth.", 500, "adapter_error");
   const callbackParams = { ...params };
+  if (payload.loginMethod) callbackParams.__loginMethod = payload.loginMethod;
+  let app: Record<string, string> | undefined;
   if (row.backend === "zernio") {
     const z = await getZernioConfig();
     if (!z) throw new AppError("Zernio API key missing.", 412, "zernio_not_configured");
     callbackParams.__apiKey = z.apiKey;
     callbackParams.__baseUrl = z.baseUrl;
-    callbackParams.__profileId = String((row.payload as { profileId?: string }).profileId ?? "");
+    callbackParams.__profileId = String(payload.profileId ?? "");
+  } else {
+    app = (await resolveProviderApp(requiredAppKeys(adapter.descriptor, payload.loginMethod), OPTIONAL_APP_KEYS)).values;
   }
   let result: ConnectResult;
   try {
-    result = await adapter.exchangeAuthorizationCode({ code: params.code ?? "", state, redirectUri: row.redirectUri, codeVerifier: row.codeVerifier ?? undefined, callbackParams });
+    result = await adapter.exchangeAuthorizationCode({ code: params.code ?? "", state, redirectUri: row.redirectUri, codeVerifier: row.codeVerifier ?? undefined, callbackParams, app });
   } catch (err) {
     await audit({ brandId: row.brandId, action: "connection.complete", outcome: "error", targetType: "provider", targetId: provider, details: { error: (err as Error).message } });
     throw err;
   }
-  const accounts = await persistConnectResult(row.brandId, provider, row.backend, result, (row.payload as { profileId?: string }).profileId);
+
+  // Reconnect: refresh the credentials of the same identity only; never swap in a different account silently.
+  if (payload.reconnectAccountId) {
+    const existing = await prisma.socialAccount.findFirst({ where: { id: payload.reconnectAccountId, brandId: row.brandId } });
+    if (!existing) throw new AppError("The account being reconnected no longer exists.", 404, "not_found");
+    const match = result.accounts.find((a) => (a.provider ?? provider) === existing.provider && a.externalAccountId === existing.externalAccountId);
+    if (!match) {
+      await audit({ brandId: row.brandId, action: "connection.reconnect", outcome: "error", targetType: "social_account", targetId: existing.id, details: { reason: "identity_mismatch" } });
+      throw new AppError(`You signed in, but "${existing.displayName}" was not among the accounts you allowed. Nothing was changed. Sign in with the profile that manages it and select it, or connect the other account as a new one.`, 409, "identity_mismatch");
+    }
+    const accounts = await persistConnectResult(row.brandId, provider, row.backend, { ...result, accounts: [match] }, payload.profileId);
+    await audit({ actorUserId: payload.userId, brandId: row.brandId, action: "connection.reconnect", targetType: "social_account", targetId: existing.id });
+    return { brandId: row.brandId, accounts, reconnected: true };
+  }
+
+  // One asset granted → attach it. Several → the owner chooses on the next screen (nothing is saved yet).
+  if (result.accounts.length > 1 && row.backend === "native") {
+    const pending = encryptJson({ result: { ...result, expiresAt: result.expiresAt?.toISOString() ?? null, refreshExpiresAt: result.refreshExpiresAt?.toISOString() ?? null } });
+    await prisma.oAuthState.update({ where: { id: row.id }, data: { payload: { ...payload, pending } as object, expiresAt: new Date(Date.now() + 15 * 60_000) } });
+    return { brandId: row.brandId, accounts: [], pendingState: state };
+  }
+  const accounts = await persistConnectResult(row.brandId, provider, row.backend, result, payload.profileId);
+  await audit({ actorUserId: payload.userId, brandId: row.brandId, action: "connection.complete", targetType: "social_account", targetId: accounts.map((a) => a.id).join(",") });
   return { brandId: row.brandId, accounts };
+}
+
+export interface PendingOption {
+  key: string;
+  provider: string;
+  externalAccountId: string;
+  accountType?: string | null;
+  displayName: string;
+  username?: string | null;
+  avatarUrl?: string | null;
+  profileUrl?: string | null;
+  /** e.g. the Facebook Page an Instagram account is linked to. */
+  linkedTo?: string | null;
+  alreadyConnected: boolean;
+  otherBrands: string[];
+  requested: boolean;
+}
+
+async function loadPending(userId: string, state: string) {
+  const row = await prisma.oAuthState.findUnique({ where: { state }, include: { brand: true } });
+  if (!row || row.brand.ownerId !== userId) throw new AppError("Nothing to choose — start the connection again.", 404, "not_found");
+  const payload = (row.payload ?? {}) as OAuthPayload;
+  if (!payload.pending) throw new AppError("This selection was already completed.", 409, "already_done");
+  if (row.expiresAt < new Date()) throw new AppError("The selection expired after 15 minutes — start the connection again.", 410, "expired");
+  const { result: raw } = decryptJson<{ result: Omit<ConnectResult, "expiresAt" | "refreshExpiresAt"> & { expiresAt: string | null; refreshExpiresAt: string | null } }>(payload.pending);
+  const result: ConnectResult = { ...raw, expiresAt: raw.expiresAt ? new Date(raw.expiresAt) : null, refreshExpiresAt: raw.refreshExpiresAt ? new Date(raw.refreshExpiresAt) : null };
+  return { row, payload, result };
+}
+
+const optionKey = (provider: string, externalAccountId: string) => `${provider}:${externalAccountId}`;
+
+/** The assets granted at sign-in that are waiting for the owner's choice. Tokens never leave the server. */
+export async function getPendingSelection(userId: string, state: string): Promise<{ brandId: string; brandName: string; provider: string; options: PendingOption[] }> {
+  const { row, result } = await loadPending(userId, state);
+  const ids = result.accounts.map((a) => a.externalAccountId);
+  const existing = await prisma.socialAccount.findMany({ where: { externalAccountId: { in: ids }, backend: row.backend, status: { not: "disconnected" }, brand: { ownerId: userId } }, include: { brand: { select: { id: true, name: true } } } });
+  const options = result.accounts.map((a): PendingOption => {
+    const p = a.provider ?? row.provider;
+    const same = existing.filter((e) => e.provider === p && e.externalAccountId === a.externalAccountId);
+    const md = (a.metadata ?? {}) as { pageName?: string; instagramUsername?: string };
+    return { key: optionKey(p, a.externalAccountId), provider: p, externalAccountId: a.externalAccountId, accountType: a.accountType, displayName: a.displayName, username: a.username, avatarUrl: a.avatarUrl, profileUrl: a.profileUrl, linkedTo: p === "instagram" ? (md.pageName ?? null) : md.instagramUsername ? `@${md.instagramUsername}` : null, alreadyConnected: same.some((e) => e.brandId === row.brandId), otherBrands: same.filter((e) => e.brandId !== row.brandId).map((e) => e.brand.name), requested: p === row.provider };
+  });
+  return { brandId: row.brandId, brandName: row.brand.name, provider: row.provider, options };
+}
+
+/** Attaches the chosen assets to the brand the connection was started for, then discards the rest. */
+export async function confirmPendingSelection(userId: string, state: string, keys: string[]): Promise<{ brandId: string; accounts: SocialAccount[] }> {
+  const { row, payload, result } = await loadPending(userId, state);
+  const chosen = result.accounts.filter((a) => keys.includes(optionKey(a.provider ?? row.provider, a.externalAccountId)));
+  if (!chosen.length) throw new AppError("Select at least one account.", 422, "nothing_selected");
+  // Single-use: clear the pending blob first so a double submit cannot attach twice.
+  const cleared = await prisma.$executeRaw`UPDATE "OAuthState" SET "payload" = "payload" - 'pending' WHERE "id" = ${row.id} AND jsonb_typeof("payload"->'pending') = 'object'`;
+  if (cleared !== 1) throw new AppError("This selection was already completed.", 409, "already_done");
+  const accounts = await persistConnectResult(row.brandId, row.provider as ProviderId, row.backend, { ...result, accounts: chosen }, payload.profileId);
+  await audit({ actorUserId: userId, brandId: row.brandId, action: "connection.complete", targetType: "social_account", targetId: accounts.map((a) => a.id).join(","), details: { chosen: chosen.length, offered: result.accounts.length } });
+  return { brandId: row.brandId, accounts };
+}
+
+/** Drops a pending selection without attaching anything. */
+export async function discardPendingSelection(userId: string, state: string): Promise<void> {
+  const row = await prisma.oAuthState.findUnique({ where: { state }, include: { brand: true } });
+  if (!row || row.brand.ownerId !== userId) return;
+  await prisma.oAuthState.update({ where: { id: row.id }, data: { payload: { ...((row.payload ?? {}) as object), pending: null } as object } });
 }
 
 /** Credential-form connection (Telegram bot token, Bluesky app password, Discord/Slack bot tokens). */
@@ -160,15 +297,17 @@ export async function connectWithCredentials(input: { brandId: string; userId: s
   return accounts;
 }
 
-async function persistConnectResult(brandId: string, provider: ProviderId, backend: AdapterBackend, result: ConnectResult, gatewayProfileId?: string): Promise<SocialAccount[]> {
+async function persistConnectResult(brandId: string, defaultProvider: ProviderId, backend: AdapterBackend, result: ConnectResult, gatewayProfileId?: string): Promise<SocialAccount[]> {
   const out: SocialAccount[] = [];
   for (const acc of result.accounts) {
+    const provider = acc.provider ?? defaultProvider;
     const creds = { ...result.credentials, ...(result.perAccountCredentials?.[acc.externalAccountId] ?? {}) };
     const gatewayAccountId = (acc.metadata?.zernioAccountId as string | undefined) ?? null;
+    // Same identity → same record (upsert), so scheduled posts and history survive a reconnect.
     const account = await prisma.socialAccount.upsert({
       where: { brandId_provider_externalAccountId_backend: { brandId, provider, externalAccountId: acc.externalAccountId, backend } },
       create: { brandId, provider, backend, externalAccountId: acc.externalAccountId, accountType: acc.accountType, displayName: acc.displayName, username: acc.username, profileUrl: acc.profileUrl, avatarUrl: acc.avatarUrl, scopes: acc.scopes ?? [], status: "connected", healthStatus: "unknown", tokenExpiresAt: result.expiresAt ?? null, gatewayAccountId, gatewayProfileId: gatewayProfileId ?? null, metadata: (acc.metadata ?? {}) as object },
-      update: { accountType: acc.accountType, displayName: acc.displayName, username: acc.username, profileUrl: acc.profileUrl, avatarUrl: acc.avatarUrl, scopes: acc.scopes ?? [], status: "connected", lastError: null, tokenExpiresAt: result.expiresAt ?? null, gatewayAccountId, gatewayProfileId: gatewayProfileId ?? null, metadata: (acc.metadata ?? {}) as object },
+      update: { accountType: acc.accountType, displayName: acc.displayName, username: acc.username, profileUrl: acc.profileUrl, avatarUrl: acc.avatarUrl, scopes: acc.scopes ?? [], status: "connected", healthStatus: "unknown", lastError: null, tokenExpiresAt: result.expiresAt ?? null, gatewayAccountId, gatewayProfileId: gatewayProfileId ?? null, metadata: (acc.metadata ?? {}) as object },
     });
     await storeCredentials(account.id, creds, result.expiresAt, result.refreshExpiresAt);
     await enqueue("check_account_health", { socialAccountId: account.id }, { dedupeKey: `health:${account.id}`, brandId });
@@ -177,20 +316,47 @@ async function persistConnectResult(brandId: string, provider: ProviderId, backe
   return out;
 }
 
+/** Permissions this app asks for at sign-in that the account's last sign-in did not grant. */
+export function missingScopes(account: Pick<SocialAccount, "provider" | "backend" | "scopes" | "metadata">): string[] {
+  if (account.backend !== "native" || !account.scopes.length) return [];
+  const lm = (account.metadata as { loginMethod?: string } | null)?.loginMethod;
+  let wanted: string[] = [];
+  if (account.provider === "facebook") wanted = META_PAGE_SCOPES;
+  else if (account.provider === "instagram") wanted = lm === "instagram_login" ? INSTAGRAM_LOGIN_SCOPES : ["pages_show_list", "pages_read_engagement", ...META_IG_VIA_FACEBOOK_SCOPES];
+  // Only the permissions publishing depends on are reported here; optional ones show up as capability states.
+  return wanted.filter((w) => !account.scopes.includes(w));
+}
+
 export async function checkAccountHealth(socialAccountId: string): Promise<SocialAccount> {
   const account = await prisma.socialAccount.findUniqueOrThrow({ where: { id: socialAccountId } });
+  if (account.status === "disconnected") return account; // nothing to check; never resurrect a disconnected account
   try {
-    const ctx = await buildAccountContext(account);
     const adapter = adapterFor(account);
+    let ctx = await buildAccountContext(account);
+    let tokenExpiresAt = account.tokenExpiresAt;
+    // Expiring tokens (Instagram Login: 60 days) are refreshed ahead of time; an expired one needs a new sign-in.
+    if (tokenExpiresAt && adapter.refreshCredentials) {
+      if (tokenExpiresAt.getTime() < Date.now()) throw new ProviderError("The saved permission expired. Reconnect this account.", { category: "auth_expired", retryable: false });
+      if (tokenExpiresAt.getTime() < Date.now() + 14 * 24 * 3600_000) {
+        const r = await adapter.refreshCredentials(ctx);
+        await storeCredentials(account.id, r.credentials, r.expiresAt ?? null);
+        tokenExpiresAt = r.expiresAt ?? null;
+        ctx = { ...ctx, credentials: r.credentials };
+      }
+    }
     const h = await adapter.verifyConnection(ctx);
     const caps = await adapter.discoverCapabilities(ctx);
-    const status = h.ok ? "connected" : h.message?.toLowerCase().includes("token") || h.message?.toLowerCase().includes("auth") ? "needs_reconnect" : "error";
-    const updated = await prisma.socialAccount.update({ where: { id: account.id }, data: { healthStatus: h.status, status, lastCheckedAt: new Date(), lastError: h.ok ? null : (h.message ?? "health check failed"), tokenExpiresAt: h.expiresAt ?? account.tokenExpiresAt, metadata: { ...(account.metadata as object), capabilities: caps, healthDetails: (h.details ?? {}) as object } as object } });
-    if (!h.ok && account.healthStatus !== "error") await notify({ brandId: account.brandId, level: "warning", title: `${account.displayName} needs attention`, body: h.message, link: `/accounts` });
+    const msg = h.message?.toLowerCase() ?? "";
+    const authProblem = (h.details as { category?: string } | undefined)?.category === "auth_expired" || msg.includes("token") || msg.includes("session") || msg.includes("authoriz");
+    const status = h.ok ? "connected" : authProblem ? "needs_reconnect" : "error";
+    const updated = await prisma.socialAccount.update({ where: { id: account.id }, data: { healthStatus: h.status, status, lastCheckedAt: new Date(), lastError: h.ok ? null : (h.message ?? "health check failed"), tokenExpiresAt: h.expiresAt ?? tokenExpiresAt, metadata: { ...(account.metadata as object), capabilities: caps, healthDetails: (h.details ?? {}) as object } as object } });
+    if (!h.ok && account.healthStatus !== "error") await notify({ brandId: account.brandId, level: "warning", title: status === "needs_reconnect" ? `Reconnect ${account.displayName}` : `${account.displayName} needs attention`, body: h.message, link: `/accounts` });
     return updated;
   } catch (err) {
     const e = err as Error;
-    return prisma.socialAccount.update({ where: { id: account.id }, data: { healthStatus: "error", status: err instanceof ProviderError && err.options.category === "auth_expired" ? "needs_reconnect" : "error", lastCheckedAt: new Date(), lastError: e.message } });
+    const needsReconnect = err instanceof ProviderError && err.options.category === "auth_expired";
+    if (needsReconnect && account.status !== "needs_reconnect") await notify({ brandId: account.brandId, level: "warning", title: `Reconnect ${account.displayName}`, body: e.message, link: `/accounts` });
+    return prisma.socialAccount.update({ where: { id: account.id }, data: { healthStatus: "error", status: needsReconnect ? "needs_reconnect" : "error", lastCheckedAt: new Date(), lastError: e.message } });
   }
 }
 
