@@ -19,7 +19,7 @@ export function BulkImport({ brandId, timezone }: { brandId: string; timezone: s
         <button className="primary" disabled={!rows || rows.some((r) => r.errors.length) || !rows.length} onClick={async () => { setMsg(null); try { const r = await api<{ created: string[] }>("/api/posts/bulk/commit", { method: "POST", json: { brandId, csv, timezone } }); setMsg(`Created ${r.created.length} posts.`); setRows(null); router.refresh(); } catch (e) { setMsg((e as Error).message); } }}>Commit</button>
       </div>
       {msg && <div className="msg info">{msg}</div>}
-      {rows && <table><thead><tr><th>Line</th><th>Text</th><th>Accounts</th><th>Scheduled (UTC)</th><th>Errors</th></tr></thead><tbody>{rows.map((r) => <tr key={r.line}><td>{r.line}</td><td className="small">{r.body.slice(0, 60)}</td><td className="small">{r.accounts.length}</td><td className="small">{r.scheduledAt ?? "—"}</td><td className="small" style={{ color: r.errors.length ? "var(--err)" : "var(--ok)" }}>{r.errors.join("; ") || "ok"}</td></tr>)}</tbody></table>}
+      {rows && <div className="scroll-x"><table><thead><tr><th>Line</th><th>Text</th><th>Accounts</th><th>Scheduled (UTC)</th><th>Errors</th></tr></thead><tbody>{rows.map((r) => <tr key={r.line}><td>{r.line}</td><td className="small">{r.body.slice(0, 60)}</td><td className="small">{r.accounts.length}</td><td className="small">{r.scheduledAt ?? "—"}</td><td className="small" style={{ color: r.errors.length ? "var(--err)" : "var(--ok)" }}>{r.errors.join("; ") || "ok"}</td></tr>)}</tbody></table></div>}
     </details>
   );
 }

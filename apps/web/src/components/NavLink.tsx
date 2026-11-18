@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 
 const EXACT = new Set(["/", "/accounts"]);
@@ -41,4 +42,17 @@ export function NavToggle({ label }: { label: string }) {
       <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden><path d="M2.5 4.5h13M2.5 9h13M2.5 13.5h13" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" fill="none" /></svg>
     </button>
   );
+}
+
+/** Dims the page behind the phone/tablet menu. Tapping it, or pressing Escape, closes the menu. */
+export function NavScrim({ label }: { label: string }) {
+  const close = () => { if (document.documentElement.getAttribute("data-nav") === "open") document.documentElement.removeAttribute("data-nav"); };
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    const onResize = () => { if (window.innerWidth > 900) close(); };
+    window.addEventListener("keydown", onKey);
+    window.addEventListener("resize", onResize);
+    return () => { window.removeEventListener("keydown", onKey); window.removeEventListener("resize", onResize); };
+  }, []);
+  return <button type="button" className="scrim" aria-label={label} onClick={close} />;
 }

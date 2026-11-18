@@ -15,10 +15,10 @@ export default async function PostsPage({ searchParams }: { searchParams: Promis
     <div>
       <h1>Posts — {brand.name}</h1>
       <div className="row"><Link href="/posts/new" className="btn">+ New post</Link><Link href="/posts">all</Link>{statuses.map((s) => <Link key={s} href={`/posts?status=${s}`} className="small">{s}</Link>)}</div>
-      <table><thead><tr><th>Status</th><th>Post</th><th>When ({brand.timezone})</th><th>Targets</th></tr></thead><tbody>
+      <div className="scroll-x"><table><thead><tr><th>Status</th><th>Post</th><th>When ({brand.timezone})</th><th>Targets</th></tr></thead><tbody>
         {posts.map((p) => (<tr key={p.id}><td><span className={`badge ${p.status}`}>{p.status}</span></td><td><Link href={`/posts/${p.id}`}>{(p.title ?? p.body).slice(0, 80) || "(no text)"}</Link></td><td className="small">{p.scheduledAt ? formatInZone(p.scheduledAt, p.scheduleTimezone ?? brand.timezone) : p.publishedAt ? formatInZone(p.publishedAt, brand.timezone) : "—"}</td><td>{p.targets.map((t) => <span key={t.id} className={`badge ${t.status}`} style={{ marginRight: 4 }}>{t.socialAccount.provider}: {t.status}</span>)}</td></tr>))}
         {posts.length === 0 && <tr><td colSpan={4} className="muted">No posts.</td></tr>}
-      </tbody></table>
+      </tbody></table></div>
       <BulkImport brandId={brand.id} timezone={brand.timezone} />
     </div>
   );

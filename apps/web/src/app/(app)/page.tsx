@@ -68,7 +68,7 @@ export default async function Overview() {
       <h2 id="notifications">Notifications</h2>
       {notifications.length === 0 ? <p className="muted">Nothing needs your attention.</p> : (
         <div className="card">
-          <table><tbody>{notifications.map((n) => (<tr key={n.id}><td><span className={`badge ${n.level}`}>{n.level}</span></td><td>{n.link ? <Link href={n.link}>{n.title}</Link> : n.title}<div className="small muted">{n.body}</div></td><td className="small muted">{formatInZone(n.createdAt, user.timezone)}</td></tr>))}</tbody></table>
+          <div className="scroll-x"><table><tbody>{notifications.map((n) => (<tr key={n.id}><td><span className={`badge ${n.level}`}>{n.level}</span></td><td>{n.link ? <Link href={n.link}>{n.title}</Link> : n.title}<div className="small muted">{n.body}</div></td><td className="small muted">{formatInZone(n.createdAt, user.timezone)}</td></tr>))}</tbody></table></div>
           <div style={{ marginTop: 8 }}><Action path="/api/notifications" json={{ ids: notifications.map((n) => n.id) }} label="Mark all read" /></div>
         </div>
       )}

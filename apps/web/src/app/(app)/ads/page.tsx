@@ -20,18 +20,18 @@ export default async function AdsPage() {
         <div key={a.id} className="card">
           <h3 style={{ marginTop: 0 }}>{a.name} <span className="badge">{a.provider}</span> <span className={`badge ${a.status}`}>{a.status}</span> {a.readOnly ? <span className="badge ok">read-only</span> : <span className="badge warn">writes enabled</span>}</h3>
           <div className="small muted">Currency {a.currency ?? "?"} · timezone {a.timezone ?? "?"} · synced {a.syncedAt ? formatInZone(a.syncedAt, brand.timezone) : "never"} · spend ceiling {a.spendCapMinor === null ? "none" : money(a.spendCapMinor, a.currency)}</div>
-          <table><thead><tr><th>Campaign</th><th>Objective</th><th>Status</th><th>Budget</th><th>Spend</th><th>Impr.</th><th>Clicks</th><th>CTR</th><th>CPC</th><th></th></tr></thead><tbody>
+          <div className="scroll-x"><table><thead><tr><th>Campaign</th><th>Objective</th><th>Status</th><th>Budget</th><th>Spend</th><th>Impr.</th><th>Clicks</th><th>CTR</th><th>CPC</th><th></th></tr></thead><tbody>
             {a.campaigns.map((c) => { const m = c.metrics as Record<string, number | null>; return <tr key={c.id}><td>{c.name}<div className="small mono muted">{c.externalId}</div></td><td className="small">{c.objective ?? "—"}</td><td><span className={`badge ${c.status === "active" ? "ok" : "warn"}`}>{c.status}</span></td><td className="small">{c.dailyBudgetMinor !== null ? `${money(c.dailyBudgetMinor, c.currency)}/day` : c.lifetimeBudgetMinor !== null ? `${money(c.lifetimeBudgetMinor, c.currency)} lifetime` : "—"}</td><td>{m.spend ?? "—"}</td><td>{m.impressions ?? "—"}</td><td>{m.clicks ?? "—"}</td><td>{m.ctr ?? "—"}</td><td>{m.cpc ?? "—"}</td><td>{c.status === "active" ? <Action className="danger" path={`/api/ads/campaigns/${c.id}/status`} method="PATCH" json={{ status: "paused" }} label="Pause" confirm="Pause this campaign on the platform?" /> : <Action path={`/api/ads/campaigns/${c.id}/status`} method="PATCH" json={{ status: "active" }} label="Resume" confirm="Resume spending on this campaign?" />}</td></tr>; })}
             {a.campaigns.length === 0 && <tr><td colSpan={10} className="muted">No campaigns synced.</td></tr>}
-          </tbody></table>
+          </tbody></table></div>
         </div>
       ))}
       {accounts.length === 0 && <p className="muted">No ad accounts connected.</p>}
       <h2>Campaign drafts</h2>
-      <table><thead><tr><th>Name</th><th>Status</th><th>Validation</th><th>Updated</th></tr></thead><tbody>
+      <div className="scroll-x"><table><thead><tr><th>Name</th><th>Status</th><th>Validation</th><th>Updated</th></tr></thead><tbody>
         {drafts.map((d) => <tr key={d.id}><td>{d.name}</td><td><span className="badge">{d.status}</span></td><td className="small">{d.validation ? JSON.stringify(d.validation).slice(0, 120) : "—"}</td><td className="small muted">{formatInZone(d.updatedAt, brand.timezone)}</td></tr>)}
         {drafts.length === 0 && <tr><td colSpan={4} className="muted">No drafts (create via POST /api/ads/campaign-drafts).</td></tr>}
-      </tbody></table>
+      </tbody></table></div>
     </div>
   );
 }

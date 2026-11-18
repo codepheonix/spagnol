@@ -5,7 +5,7 @@ import { requireUser, getActiveBrand } from "@/lib/auth";
 import { getLocale } from "@/lib/i18n";
 import { BrandSwitcher, LocaleToggle, LogoutButton } from "@/components/BrandSwitcher";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { NavLink, NavToggle } from "@/components/NavLink";
+import { NavLink, NavScrim, NavToggle } from "@/components/NavLink";
 import { Wordmark } from "@/components/Logo";
 
 export const dynamic = "force-dynamic";
@@ -35,6 +35,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
         ))}
       </nav>
+      <NavScrim label={L("Close the menu", "Chiudi il menu")} />
       <div className="col">
         <header className="topbar">
           <NavToggle label={L("Show or hide the menu", "Mostra o nascondi il menu")} />

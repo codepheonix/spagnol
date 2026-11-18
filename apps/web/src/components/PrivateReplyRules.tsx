@@ -165,7 +165,7 @@ export function PrivateReplyRules({ brandId, brandName }: { brandId: string; bra
       </div>
 
       <h3>Rules</h3>
-      <table><thead><tr><th>Account</th><th>Post</th><th>Keyword</th><th>Reply</th><th>Enabled</th><th></th></tr></thead><tbody>
+      <div className="scroll-x"><table><thead><tr><th>Account</th><th>Post</th><th>Keyword</th><th>Reply</th><th>Enabled</th><th></th></tr></thead><tbody>
         {rules.map((r) => (
           <tr key={r.id}>
             <td className="small">{accountName(r.socialAccountId)}</td>
@@ -177,10 +177,10 @@ export function PrivateReplyRules({ brandId, brandName }: { brandId: string; bra
           </tr>
         ))}
         {rules.length === 0 && <tr><td colSpan={6} className="muted">No Comment → DM rules yet.</td></tr>}
-      </tbody></table>
+      </tbody></table></div>
 
       <h3>Comments seen on watched posts (newest first)</h3>
-      <table><thead><tr><th>When</th><th>Account</th><th>From</th><th>Comment</th><th>Via</th><th>Outcome</th><th>Detail</th><th></th></tr></thead><tbody>
+      <div className="scroll-x"><table><thead><tr><th>When</th><th>Account</th><th>From</th><th>Comment</th><th>Via</th><th>Outcome</th><th>Detail</th><th></th></tr></thead><tbody>
         {events.map((ev) => (
           <tr key={ev.id}>
             <td className="small muted">{ev.createdAt.replace("T", " ").slice(0, 16)}</td>
@@ -194,7 +194,7 @@ export function PrivateReplyRules({ brandId, brandName }: { brandId: string; bra
           </tr>
         ))}
         {events.length === 0 && <tr><td colSpan={8} className="muted">Nothing yet. Comment the keyword on the watched post from another account to test.</td></tr>}
-      </tbody></table>
+      </tbody></table></div>
     </div>
   );
 }

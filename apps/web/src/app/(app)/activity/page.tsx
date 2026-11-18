@@ -8,9 +8,9 @@ export default async function ActivityPage() {
   return (
     <div>
       <h1>Activity</h1>
-      <table><thead><tr><th>When</th><th>Brand</th><th>Action</th><th>Target</th><th>Outcome</th><th>Details</th></tr></thead><tbody>
+      <div className="scroll-x"><table><thead><tr><th>When</th><th>Brand</th><th>Action</th><th>Target</th><th>Outcome</th><th>Details</th></tr></thead><tbody>
         {logs.map((l) => <tr key={l.id}><td className="small muted">{formatInZone(l.createdAt, user.timezone)}</td><td className="small">{l.brand?.name ?? "—"}</td><td className="mono small">{l.action}</td><td className="mono small">{l.targetType ? `${l.targetType}:${l.targetId}` : ""}</td><td><span className={`badge ${l.outcome === "ok" ? "ok" : "err"}`}>{l.outcome}</span></td><td className="small muted">{JSON.stringify(l.details).slice(0, 140)}</td></tr>)}
-      </tbody></table>
+      </tbody></table></div>
     </div>
   );
 }

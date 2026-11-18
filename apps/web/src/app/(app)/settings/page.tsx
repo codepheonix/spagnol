@@ -22,11 +22,11 @@ export default async function SettingsPage() {
       <SettingsForm current={current} />
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Endpoints to register with providers</h3>
-        <table><tbody>
+        <div className="scroll-x"><table><tbody>
           <tr><td>Zernio webhook URL</td><td className="mono">{base}/api/webhooks/zernio</td></tr>
           <tr><td>Meta sign-in redirect URLs</td><td className="mono">{base}/api/oauth/facebook/callback · {base}/api/oauth/instagram/callback <Link href="/accounts/setup/meta">(Meta setup)</Link></td></tr>
           <tr><td>Job tick (cron)</td><td className="mono">POST {base}/api/jobs/tick — header Authorization: Bearer $CRON_SECRET</td></tr>
-        </tbody></table>
+        </tbody></table></div>
         <p className="small muted">Storage driver <b>{process.env.STORAGE_DRIVER ?? "local"}</b>; Meta app {apps.META_APP_ID && apps.META_APP_SECRET ? "configured" : "not configured"}; scheduler last ran {lastTick?.at ? new Date(lastTick.at).toLocaleString("it-IT", { timeZone: user.timezone }) : "never"}.</p>
       </div>
     </div>

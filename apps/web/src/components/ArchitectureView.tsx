@@ -179,7 +179,7 @@ export function ArchitectureView({ diagrams, lang }: { diagrams: ArchDiagram[]; 
               )}
               <h3>{T("Recent jobs", "Job recenti")}</h3>
               {probe.recentJobs?.length ? (
-                <table className="arch-jobs"><tbody>{probe.recentJobs.map((j) => <tr key={j.id}><td className="mono small" title={j.id}>{j.id.slice(-8)}</td><td className="mono small">{j.type}</td><td><span className={`badge ${j.status === "succeeded" ? "ok" : j.status === "dead" || j.status === "failed" ? "err" : ""}`}>{j.status}</span></td><td className="small muted">{j.at.slice(5, 16).replace("T", " ")}</td></tr>)}</tbody></table>
+                <div className="scroll-x"><table className="arch-jobs"><tbody>{probe.recentJobs.map((j) => <tr key={j.id}><td className="mono small" title={j.id}>{j.id.slice(-8)}</td><td className="mono small">{j.type}</td><td><span className={`badge ${j.status === "succeeded" ? "ok" : j.status === "dead" || j.status === "failed" ? "err" : ""}`}>{j.status}</span></td><td className="small muted">{j.at.slice(5, 16).replace("T", " ")}</td></tr>)}</tbody></table></div>
               ) : <p className="small muted">{T("No job recorded for this node.", "Nessun job registrato per questo nodo.")}</p>}
               {probe.recentJobs?.some((j) => j.error) && <p className="small arch-error">{probe.recentJobs.find((j) => j.error)!.error}</p>}
               <h3>{T("Next troubleshooting step", "Prossimo passo di diagnosi")}</h3>

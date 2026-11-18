@@ -66,12 +66,12 @@ export default async function MetaSetupPage() {
 
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Development mode, Live mode, and clients</h3>
-        <table><tbody>
+        <div className="scroll-x"><table><tbody>
           <tr><td><b>First test, your own Pages and Instagram accounts</b></td><td>Works in Development mode with no review, as long as the Facebook profile signing in has a role on the app. Posts are visible only to people with an app role.</td></tr>
           <tr><td><b>Posts visible to everyone</b></td><td>The app has to be <b>Live</b>. Meta says to switch only once testing is finished and App Review is done, because in Live mode only permissions approved through App Review can be requested. Before switching, set <b>Privacy policy URL</b> and <b>User data deletion</b> in <b>App settings → Basic</b> to <span className="mono" style={{ userSelect: "all" }}>{base}/privacy</span>.</td></tr>
           <tr><td><b>Clients signing in with their own Facebook</b></td><td>Needs <b>Advanced Access</b> for each permission, granted through <b>App Review</b> plus <b>Business Verification</b>: <span className="mono">pages_show_list, pages_manage_posts, pages_read_engagement, business_management, instagram_basic, instagram_content_publish</span>. Until then a client can only be connected if their Facebook profile is added under <b>App roles</b> in the Meta app.</td></tr>
           <tr><td><b>If Meta&apos;s sign-in complains about a configuration</b></td><td>Create one under <b>Facebook Login for Business → Configurations</b> (User access token; tick the permissions above) and paste its ID in the optional settings.</td></tr>
-        </tbody></table>
+        </tbody></table></div>
         <p className="small muted">Graph API version pinned by this app: {META_GRAPH_VERSION}. Meta renames dashboard screens from time to time; the names above follow Meta&apos;s current developer documentation.</p>
       </div>
     </div>

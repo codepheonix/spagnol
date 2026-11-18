@@ -15,10 +15,10 @@ export function SlotEditor({ brandId, timezone, slots, accounts }: { brandId: st
   const router = useRouter();
   return (
     <div className="card">
-      <table><thead><tr><th>Day</th><th>Time</th><th>Zone</th><th>Account</th><th>Active</th><th></th></tr></thead><tbody>
+      <div className="scroll-x"><table><thead><tr><th>Day</th><th>Time</th><th>Zone</th><th>Account</th><th>Active</th><th></th></tr></thead><tbody>
         {slots.map((s) => <tr key={s.id}><td>{DAYS[s.weekday]}</td><td>{s.time}</td><td>{s.timezone}</td><td>{s.account ?? "all"}</td><td><Action path={`/api/queues/${s.id}`} method="PATCH" json={{ active: !s.active }} label={s.active ? "pause" : "resume"} /></td><td><Action className="danger" path={`/api/queues/${s.id}`} method="DELETE" label="remove" /></td></tr>)}
         {slots.length === 0 && <tr><td colSpan={6} className="muted">No slots. Add weekly posting times below; “next free slot” fills them in order.</td></tr>}
-      </tbody></table>
+      </tbody></table></div>
       <div className="row" style={{ marginTop: 8 }}>
         <select value={weekday} onChange={(e) => setWeekday(Number(e.target.value))} style={{ width: 90 }}>{DAYS.map((d, i) => <option key={d} value={i}>{d}</option>)}</select>
         <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ width: 110 }} />
