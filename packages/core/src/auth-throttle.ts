@@ -10,6 +10,11 @@
  * The pair rule stops ordinary guessing. The account rule slows guessing spread over many
  * addresses; it is deliberately high so that one person failing a few times elsewhere cannot lock
  * the real owner out. A successful sign-in clears only the pair counter.
+ *
+ * Back-off is progressive: each time the same counter reaches its limit again the block doubles
+ * (15 min, 30 min, 1 h, 2 h, capped at 4 h). A browser that has signed in to the account before
+ * (the "known device" cookie) is exempt from the account-wide rule, so an attacker hammering an
+ * account from many addresses cannot lock its real owner out.
  */
 import { createHash } from "node:crypto";
 import { prisma } from "@sm/db";
@@ -35,8 +40,10 @@ function keys(email: string, ip: string | null): Array<{ key: string; rule: Rule
 export type LoginGate = { allowed: true } | { allowed: false; retryAfterSeconds: number };
 
 /** Call before checking the password. Never reveals which rule matched. */
-export async function checkLoginAllowed(email: string, ip: string | null, now = new Date()): Promise<LoginGate> {
-  const rows = await prisma.authThrottle.findMany({ where: { key: { in: keys(email, ip).map((k) => k.key) }, blockedUntil: { gt: now } }, select: { blockedUntil: true } });
+export async function checkLoginAllowed(email: string, ip: string | null, now = new Date(), opts: { knownDevice?: boolean } = {}): Promise<LoginGate> {
+  const all = keys(email, ip);
+  const applicable = opts.knownDevice ? all.slice(0, 2) : all; // a known device is not subject to the account-wide rule
+  const rows = await prisma.authThrottle.findMany({ where: { key: { in: applicable.map((k) => k.key) }, blockedUntil: { gt: now } }, select: { blockedUntil: true } });
   if (rows.length === 0) return { allowed: true };
   const until = Math.max(...rows.map((r) => r.blockedUntil!.getTime()));
   return { allowed: false, retryAfterSeconds: Math.max(1, Math.ceil((until - now.getTime()) / 1000)) };
@@ -50,7 +57,6 @@ export async function recordLoginFailure(email: string, ip: string | null, now =
   for (const { key, rule } of keys(email, ip)) {
     const at = ts(now);
     const windowFloor = ts(new Date(now.getTime() - rule.windowMs));
-    const blockUntil = ts(new Date(now.getTime() + rule.blockMs));
     await prisma.$executeRaw`
       INSERT INTO "AuthThrottle" ("key", "failures", "windowStart", "blockedUntil", "updatedAt")
       VALUES (${key}, 1, ${at}::timestamp, NULL, ${at}::timestamp)
@@ -58,10 +64,22 @@ export async function recordLoginFailure(email: string, ip: string | null, now =
         "failures" = CASE WHEN "AuthThrottle"."windowStart" < ${windowFloor}::timestamp THEN 1 ELSE "AuthThrottle"."failures" + 1 END,
         "windowStart" = CASE WHEN "AuthThrottle"."windowStart" < ${windowFloor}::timestamp THEN ${at}::timestamp ELSE "AuthThrottle"."windowStart" END,
         "blockedUntil" = CASE
-          WHEN "AuthThrottle"."windowStart" >= ${windowFloor}::timestamp AND "AuthThrottle"."failures" + 1 >= ${rule.limit} THEN ${blockUntil}::timestamp
+          WHEN "AuthThrottle"."windowStart" >= ${windowFloor}::timestamp AND "AuthThrottle"."failures" + 1 >= ${rule.limit}
+            THEN ${at}::timestamp + (${rule.blockMs}::double precision * power(2, LEAST("AuthThrottle"."blocks", 4))) * interval '1 millisecond'
           ELSE "AuthThrottle"."blockedUntil" END,
+        "blocks" = CASE
+          WHEN "AuthThrottle"."windowStart" >= ${windowFloor}::timestamp AND "AuthThrottle"."failures" + 1 = ${rule.limit} THEN "AuthThrottle"."blocks" + 1
+          ELSE "AuthThrottle"."blocks" END,
         "updatedAt" = ${at}::timestamp`;
   }
+}
+
+/** Which rules are blocking right now — for alerts, never for the answer sent to the client. */
+export async function activeLoginBlocks(email: string, ip: string | null, now = new Date()): Promise<Array<"pair" | "ip" | "account">> {
+  const k = keys(email, ip);
+  const rows = await prisma.authThrottle.findMany({ where: { key: { in: k.map((x) => x.key) }, blockedUntil: { gt: now } }, select: { key: true } });
+  const names = ["pair", "ip", "account"] as const;
+  return names.filter((_, i) => rows.some((r) => r.key === k[i]!.key));
 }
 
 /** Call after a correct sign-in: the person at this address knows the password. */

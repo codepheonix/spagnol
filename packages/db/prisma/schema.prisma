@@ -24,9 +24,22 @@ model User {
   timezone     String    @default("Europe/Rome")
   locale       String    @default("it")
   totpSecretEnc String?
+  /// Secret of an enrolment that has been started but not yet confirmed with a code.
+  totpPendingEnc String?
+  totpEnabledAt  DateTime?
+  /// Last accepted time step: a code can be used once.
+  totpLastStep   Int?
+  passwordChangedAt  DateTime?
+  /// Set when the password is known to be exposed: every page and API call is refused until it is changed.
+  mustChangePassword Boolean   @default(false)
+  /// Until this moment the account may be used without two-factor sign-in; afterwards enrolment is mandatory.
+  mfaGraceUntil      DateTime?
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
   sessions     Session[]
+  passwordHistory PasswordHistory[]
+  recoveryCodes   RecoveryCode[]
+  resetTokens     PasswordResetToken[]
   brands       Brand[]
   auditLogs    AuditLog[]
 }
@@ -39,6 +52,8 @@ model AuthThrottle {
   failures     Int       @default(0)
   windowStart  DateTime  @default(now())
   blockedUntil DateTime?
+  /// How many times this counter has reached its limit recently: each block lasts longer than the last.
+  blocks       Int       @default(0)
   updatedAt    DateTime  @default(now()) @updatedAt
 }
 
@@ -51,6 +66,50 @@ model Session {
   ip        String?
   expiresAt DateTime
   createdAt DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  /// When the password (and second factor, if enabled) was last entered in this session: sensitive actions need it to be recent.
+  reauthAt   DateTime?
+  /// When the second factor was verified for this session.
+  mfaAt      DateTime?
+
+  @@index([userId])
+}
+
+/// Hashes of passwords the account must not use again: every previous password, and any password
+/// known to have been exposed. Only scrypt hashes are stored.
+model PasswordHistory {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  passwordHash String
+  reason       String   @default("previous") // previous | exposed
+  createdAt    DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// One-time recovery codes for two-factor sign-in. Only SHA-256 hashes are stored.
+model RecoveryCode {
+  id        String    @id @default(cuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash  String    @unique
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+}
+
+/// Single-use, short-lived password reset links. Only the SHA-256 hash of the token is stored.
+model PasswordResetToken {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash   String    @unique
+  expiresAt   DateTime
+  usedAt      DateTime?
+  requestedIp String?
+  createdAt   DateTime  @default(now())
 
   @@index([userId])
 }
