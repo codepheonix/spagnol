@@ -1,0 +1,4 @@
+# Findings reviewed by hand and confirmed not to be secrets. One fingerprint per line.
+# scripts/security-smoke.mjs line 88: a made-up reset token and a placeholder password that the
+# outside-in check sends to prove that invented reset links are refused.
+883c04df7ae197b413ca0a09ac3526a96fc14b2e:scripts/security-smoke.mjs:generic-api-key:88

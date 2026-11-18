@@ -13,10 +13,20 @@ What was run, against what, and the result. No secrets, addresses or tokens are 
 | Preview isolation | preview build of `883c04d` | `/api/health` answers 503: no database is configured for previews; no production secret is in the Preview target |
 | Runtime errors after release | production, first 15 minutes | none |
 
+Later the same day (commit `9de5abd`, Security Center):
+
+| Check | Target | Result |
+|---|---|---|
+| Automated tests | local Postgres | 139 passed (media 4, security 8, integrations 19, core 108) |
+| CI on GitHub: migrations, typecheck, tests, build on a fresh database; dependency audit | GitHub Actions | passed |
+| CI secret scan (gitleaks, 27 commits) | GitHub Actions | one match, reviewed: a made-up reset token in the check script, not a secret |
+| Outside-in check | production, `9de5abd` | 51 passed, 0 failed (includes: health probe carries no error text, deployment and database environment match, scheduler ran within five minutes, Security Center refuses visitors without a session) |
+| Security Center and security diagram render with real figures, no script-policy violations, no sideways scroll at 390 px | local production build | checked in a browser |
+
 Not verified in production, and why:
 
 - Two-factor enrolment and sign-in with a code: needs the owner's authenticator app.
 - Password reset by e-mail: no mail service is connected.
 - The rewritten Bluesky adapter against Bluesky itself: no account is connected.
-- The scheduler after this release was confirmed from the health probe only from the next release
-  on (the probe gained the field in the commit after `883c04d`).
+- The Security Center's content for the owner: the page is live, but the owner account is held at
+  the password screen until the owner chooses a new password.
