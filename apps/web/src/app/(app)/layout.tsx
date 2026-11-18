@@ -22,7 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     [L("Accounts", "Account"), [["/", L("Overview", "Panoramica")], ["/organizations", L("Organizations", "Organizzazioni")], ["/accounts", L("All accounts", "Tutti gli account")], ["/connections", L("Social connections", "Collegamenti social")]]],
     [L("Create", "Crea"), [["/ai", L("AI command center", "Centro AI")], ["/posts", L("Content studio", "Contenuti")], ["/media", L("Media library", "Libreria media")], ["/calendar", L("Publishing calendar", "Calendario")]]],
     [L("Respond and grow", "Rispondi e cresci"), [["/inbox", L("Unified inbox", "Messaggi")], ["/ads", L("Ads manager", "Inserzioni")], ["/analytics", L("Analytics", "Statistiche")], ["/automations", L("Automation flows", "Automazioni")]]],
-    [L("System", "Sistema"), [["/architecture", L("Workflow diagrams", "Diagrammi di flusso")], ["/health", L("System health", "Stato del sistema")], ["/integrations", L("Integrations", "Integrazioni")], ["/activity", L("Activity", "Attività")], ["/settings", L("Settings", "Impostazioni")]]],
+    [L("System", "Sistema"), [["/architecture", L("Workflow diagrams", "Diagrammi di flusso")], ["/security", L("Security", "Sicurezza")], ["/health", L("System health", "Stato del sistema")], ["/integrations", L("Integrations", "Integrazioni")], ["/activity", L("Activity", "Attività")], ["/settings", L("Settings", "Impostazioni")]]],
   ];
   return (
     <div className="shell">

@@ -14,8 +14,8 @@ export default async function ArchitecturePage() {
       <h1>{locale === "it" ? "Architettura e flussi" : "Architecture & Workflows"}</h1>
       <p className="muted small" style={{ marginTop: -6, maxWidth: 900 }}>
         {locale === "it"
-          ? "Cinque diagrammi del sistema così com’è costruito oggi. Lo stato di ogni nodo è letto dai dati reali (job, tentativi, webhook, account, credenziali) e si aggiorna ogni 30 secondi. Le parti non ancora costruite sono indicate come tali."
-          : "Five diagrams of the system as it is built today. Each node’s status is read from real records (jobs, attempts, webhooks, accounts, credentials) and refreshes every 30 seconds. Parts that are not built yet are marked as such."}
+          ? "Sei diagrammi del sistema così com’è costruito oggi, compreso il percorso di sicurezza. Lo stato di ogni nodo è letto dai dati reali (job, tentativi, webhook, account, credenziali) e si aggiorna ogni 30 secondi. Le parti non ancora costruite sono indicate come tali."
+          : "Six diagrams of the system as it is built today, including the security path. Each node’s status is read from real records (jobs, attempts, webhooks, accounts, credentials) and refreshes every 30 seconds. Parts that are not built yet are marked as such."}
       </p>
       <ArchitectureView diagrams={JSON.parse(JSON.stringify(DIAGRAMS))} lang={locale} />
     </div>

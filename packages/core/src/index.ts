@@ -18,4 +18,5 @@ export * from "./auth-throttle";
 export * from "./account-security";
 export * from "./mailer";
 export * from "./environment";
+export * from "./security-center";
 export * from "./handlers";

@@ -1,0 +1,51 @@
+%% GENERATED from packages/core/src/architecture/diagrams.ts — run `pnpm diagrams`; do not edit by hand.
+%% Security path: Every control a request passes between a browser and the data, the side entrances (webhooks, scheduler, platform sign-in), and the controls that do not exist yet.
+flowchart TD
+  visitor(["Browser"]):::external
+  edge["Edge: TLS, headers, script policy, cross-site refusal"]:::implemented
+  firewall["Network firewall and bot challenge<br/><i>planned</i>"]:::planned
+  signin["Sign-in: password and attempt limits"]:::implemented
+  blocked(["Blocked attempt, owner notified"]):::implemented
+  second{"Second factor"}:::implemented
+  session["Session and account gate"]:::implemented
+  reauth["Password again for sensitive changes"]:::implemented
+  authz["Authorization: owner → workspace<br/><i>partial</i>"]:::partial
+  roles["Members, roles and approvals<br/><i>planned</i>"]:::planned
+  services["API services"]:::implemented
+  ai["AI: drafts only<br/><i>partial</i>"]:::partial
+  publish["Publishing and platform credentials"]:::implemented
+  ads["Advertising: spending switched off<br/><i>partial</i>"]:::partial
+  db[("Database")]:::implemented
+  tenant["Tenant isolation inside the database<br/><i>planned</i>"]:::planned
+  keys[("Server keys")]:::implemented
+  hooks["Webhooks: signature or closed"]:::implemented
+  rejected(["Rejected delivery"]):::implemented
+  visitor -->|"HTTPS"| edge
+  edge -->|"same-site request"| signin
+  firewall -.->|"before the app"| edge
+  signin -.->|"too many failures"| blocked
+  signin -->|"password correct"| second
+  second -->|"code accepted"| session
+  second -.->|"wrong codes"| blocked
+  session --> authz
+  session -.->|"keys, credentials, spend"| reauth
+  roles -.->|"planned"| authz
+  authz --> services
+  services --> ai
+  services --> publish
+  services --> ads
+  reauth -->|"recent password"| ads
+  ai --> db
+  publish --> db
+  ads --> db
+  tenant -.->|"planned"| db
+  keys -->|"decrypt at call time"| publish
+  keys -->|"signing secret"| hooks
+  hooks -->|"valid signature"| services
+  hooks -.->|"bad or missing signature"| rejected
+  classDef implemented fill:#12352b,stroke:#6fb89b,color:#ede8e2
+  classDef partial fill:#3a3115,stroke:#d9a441,color:#ede8e2
+  classDef planned fill:#272422,stroke:#918982,color:#b8b0a8,stroke-dasharray:5 4
+  classDef candidate fill:#272422,stroke:#8daad4,color:#b8b0a8,stroke-dasharray:5 4
+  classDef optional fill:#1f2a3a,stroke:#8daad4,color:#ede8e2,stroke-dasharray:2 3
+  classDef external fill:#1b1917,stroke:#4a4440,color:#ede8e2

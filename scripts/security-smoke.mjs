@@ -81,6 +81,8 @@ for (const p of ["/forgot", "/reset?token=" + "x".repeat(40)]) {
   const r = await req(p);
   check(`${p.split("?")[0]} is reachable signed out and carries a script policy`, r.status === 200 && (r.headers.get("content-security-policy") ?? "").includes("nonce-"), `status ${r.status}`);
 }
+const center = await req("/security");
+check("Security Center needs a session", [302, 307].includes(center.status) && (center.headers.get("location") ?? "").includes("/login"), `status ${center.status}`);
 const acct = await req("/account/security");
 check("account security page needs a session", [302, 307].includes(acct.status) && (acct.headers.get("location") ?? "").includes("/login"), `status ${acct.status}`);
 for (const [path, method] of [["/api/account/sessions", "GET"], ["/api/account/sessions", "DELETE"], ["/api/account/mfa/start", "POST"], ["/api/account/mfa/disable", "POST"], ["/api/account/reauth", "POST"], ["/api/auth/password", "POST"], ["/api/auth/mfa", "POST"]]) {

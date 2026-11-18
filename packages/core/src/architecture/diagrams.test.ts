@@ -7,8 +7,8 @@ import { DIAGRAMS, toMermaid } from "./diagrams";
 const docs = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..", "..", "docs", "architecture");
 
 describe("architecture diagrams", () => {
-  it("has the five required diagrams", () => {
-    expect(DIAGRAMS.map((d) => d.id)).toEqual(["system", "account-connections", "publishing-learning", "advertising", "messaging-leads"]);
+  it("has the five workflow diagrams and the security path", () => {
+    expect(DIAGRAMS.map((d) => d.id)).toEqual(["system", "account-connections", "publishing-learning", "advertising", "messaging-leads", "security"]);
   });
 
   for (const d of DIAGRAMS) {

@@ -5,6 +5,7 @@
  * not built is "disabled".
  */
 import { prisma } from "@sm/db";
+import { getSecurityOverview, type ControlState } from "../security-center";
 import { queueStats } from "../queue";
 import { getAiConfig, getZernioConfig, providerAppStatus } from "../settings";
 import { listPrivateReplyRules } from "../private-replies";
@@ -197,5 +198,17 @@ export async function getArchitectureStatus(userId: string): Promise<{ at: strin
   const [users, lastLogin] = await Promise.all([prisma.user.count(), prisma.auditLog.findFirst({ where: { action: { startsWith: "auth." } }, orderBy: { createdAt: "desc" } })]);
   const auth: ProbeResult = { status: "healthy", summary: `Session valid; ${users} user account(s), ${brandIds.length} brand(s) owned by you. Organizations and roles are not built yet.`, lastSuccessAt: iso(lastLogin?.createdAt) ?? new Date().toISOString(), credentials: [{ name: "AUTH_SECRET", configured: Boolean(process.env.AUTH_SECRET) }, { name: "TOKEN_ENCRYPTION_KEY", configured: Boolean(process.env.TOKEN_ENCRYPTION_KEY) }], metrics: { users, brands: brandIds.length } };
 
-  return { at: new Date().toISOString(), version, probes: { frontend, auth, api, db, queue, scheduler, ai: aiProbe, publishing, verification, inbox, webhooks, private_replies, ads, media, connections, meta_app, zernio: zernioProbe, analytics, leads, automation_rules } };
+  // --- security path: the same records the Security Center reports -----------------------------
+  const sec = await getSecurityOverview(userId, null);
+  const control = (...ids: string[]): ProbeResult => {
+    const found = sec.controls.filter((c) => ids.includes(c.id));
+    const rank: Record<ControlState, number> = { action: 4, attention: 3, unknown: 2, not_built: 1, ok: 0 };
+    const worst = found.sort((x, y) => rank[y.state] - rank[x.state])[0];
+    if (!worst) return { status: "disabled", summary: "No record." };
+    const status: LiveStatus = worst.state === "ok" ? "healthy" : worst.state === "attention" ? "warning" : worst.state === "action" ? "failed" : worst.state === "unknown" ? "waiting" : "disabled";
+    return { status, summary: found.map((c) => `${c.title}: ${c.detail}`).join(" ").slice(0, 600), lastSuccessAt: status === "healthy" ? sec.at : null, nextStep: worst.state === "ok" ? undefined : worst.action ? `${worst.action} (${worst.href})` : `See ${worst.source}.` };
+  };
+  const secProbes = { sec_browser: control("browser"), sec_signin: control("password", "signin-limits"), sec_mfa: control("mfa"), sec_session: control("sessions"), sec_connections: control("tokens", "token-expiry", "oauth"), sec_db: control("db-lock"), sec_env: control("environment"), sec_keys: control("server-keys"), sec_webhooks: control("webhooks"), sec_ads: control("ads-write") };
+
+  return { at: new Date().toISOString(), version, probes: { ...secProbes, frontend, auth, api, db, queue, scheduler, ai: aiProbe, publishing, verification, inbox, webhooks, private_replies, ads, media, connections, meta_app, zernio: zernioProbe, analytics, leads, automation_rules } };
 }
