@@ -41,7 +41,7 @@ It uses each platform's official API. Not a clone of any other product's UI or s
 ## Design system
 - Tokens and components are in `apps/web/src/app/globals.css` (plain CSS, no utility framework): titanium + smoked glass, one ultraviolet signal colour, Bricolage Grotesque for display and Hanken Grotesk for UI (self-hosted via `@fontsource-variable`). Dark is the default; light is supported.
 - Platform logos: Font Awesome brand glyphs through `lib/platforms.ts` and `PlatformMedal`. Never redraw, recolour inside, stretch or extrude a platform's mark — the 3D treatment belongs to the card and the disc around it. Add a platform by adding one entry to `PLATFORMS`.
-- `built: false` platforms show "Not available yet" and no Connect button. Never ship a button that does nothing.
+- `built: false` platforms show "Not available yet" and no Connect button; selecting the card opens an explanation. Never ship a control that does nothing: every platform card opens its dialog, including when no workspace exists yet (the dialog creates the first one).
 - Real 3D (three.js / React Three Fiber) is used once, for the Overview scene: lazy-loaded, capped pixel ratio, static under reduced motion, with a flat fallback and text links for the same destinations. Everything else is CSS 3D. Do not put WebGL on a page where it could delay a task.
 - Every number on screen is read from records. Unknown is "—" or "Not checked yet", never 0 or an estimate.
 

@@ -1,6 +1,8 @@
 "use client";
 import Link from "next/link";
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent } from "react";
+import { useRouter } from "next/navigation";
+import { api } from "./api";
 import { PLATFORMS, platformById } from "@/lib/platforms";
 import { PlatformMedal } from "./PlatformMedal";
 import { ConnectButton, CredentialsConnect } from "./Connections";
@@ -36,8 +38,31 @@ function untilt(e: PointerEvent<HTMLElement>) {
 }
 
 export function ConnectionCenter({ cards, workspaces, activeWorkspaceId, metaReady, igLoginReady, zernioReady, openFirst }: { cards: CardState[]; workspaces: Workspace[]; activeWorkspaceId: string | null; metaReady: boolean; igLoginReady: boolean; zernioReady: boolean; openFirst?: string | null }) {
+  const router = useRouter();
   const [open, setOpen] = useState<string | null>(null);
+  // A workspace created inside the dialog is usable at once, before the page data refreshes.
+  const [created, setCreated] = useState<Workspace[]>([]);
+  const all = [...workspaces, ...created.filter((c) => !workspaces.some((w) => w.id === c.id))];
   const [workspaceId, setWorkspaceId] = useState(activeWorkspaceId ?? workspaces[0]?.id ?? "");
+  const [first, setFirst] = useState({ kind: "personal", name: "" });
+  const [firstErr, setFirstErr] = useState<string | null>(null);
+  const [firstBusy, setFirstBusy] = useState(false);
+  const createFirst = async () => {
+    setFirstErr(null);
+    if (!first.name.trim()) { setFirstErr("Give the workspace a name."); return; }
+    setFirstBusy(true);
+    try {
+      const r = await api<{ brand: Workspace }>("/api/brands", { method: "POST", json: { kind: first.kind, name: first.name.trim(), locale: "en" } });
+      await api(`/api/brands/${r.brand.id}/select`, { method: "POST" });
+      setCreated((c) => [...c, { id: r.brand.id, name: r.brand.name, kind: r.brand.kind }]);
+      setWorkspaceId(r.brand.id);
+      router.refresh();
+    } catch (e) {
+      setFirstErr((e as Error).message);
+    } finally {
+      setFirstBusy(false);
+    }
+  };
   const dialog = useRef<HTMLDialogElement>(null);
   const show = (id: string) => {
     setOpen(id);
@@ -45,12 +70,13 @@ export function ConnectionCenter({ cards, workspaces, activeWorkspaceId, metaRea
   };
   // A link such as /connections?connect=instagram opens that platform's dialog directly.
   useEffect(() => {
-    if (openFirst && workspaces.length > 0 && cards.some((c) => c.id === openFirst && (c.connect || c.viaZernio))) show(openFirst);
+    if (openFirst && cards.some((c) => c.id === openFirst)) show(openFirst);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [openFirst]);
   const card = cards.find((c) => c.id === open) ?? null;
   const p = open ? platformById(open) : undefined;
-  const ws = workspaces.find((w) => w.id === workspaceId);
+  const ws = all.find((w) => w.id === workspaceId);
+  const canConnectOpen = Boolean(card?.connect) || Boolean(card?.viaZernio && zernioReady);
   const setupHref = "/accounts/setup/meta";
   const isMeta = open === "facebook" || open === "instagram";
 
@@ -62,7 +88,14 @@ export function ConnectionCenter({ cards, workspaces, activeWorkspaceId, metaRea
           const live = c?.accounts ?? [];
           const canConnect = Boolean(c?.connect) || Boolean(c?.viaZernio);
           return (
-            <article key={pl.id} className={`pcard${canConnect ? "" : " planned"}`} style={{ "--tint": pl.tint, "--delay": `${-(i % 5) * 1.1}s` } as CSSProperties} onPointerMove={tilt} onPointerLeave={untilt}>
+            <article
+              key={pl.id}
+              className={`pcard${canConnect ? "" : " planned"}`}
+              style={{ "--tint": pl.tint, "--delay": `${-(i % 5) * 1.1}s`, cursor: "pointer" } as CSSProperties}
+              onPointerMove={tilt}
+              onPointerLeave={untilt}
+              onClick={(e) => { if (!(e.target as HTMLElement).closest("a, button")) show(pl.id); }}
+            >
               <div className="row lift" style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
                 <PlatformMedal id={pl.id} off={!canConnect} />
                 {live.length > 0 ? <span className="badge connected">{live.length} connected</span> : canConnect ? <span className="badge">Not connected</span> : <span className="badge">Not available yet</span>}
@@ -81,7 +114,7 @@ export function ConnectionCenter({ cards, workspaces, activeWorkspaceId, metaRea
               ))}
               {live.length > 2 && <div className="small muted lift-s">and {live.length - 2} more</div>}
               <div className="foot lift-s">
-                {canConnect ? <button className="primary" onClick={() => show(pl.id)} disabled={workspaces.length === 0}>{live.length ? "Connect another" : "Connect"}</button> : <span className="small muted">Nothing to connect to yet</span>}
+                {canConnect ? <button className="primary" onClick={() => show(pl.id)}>{live.length ? "Connect another" : "Connect"}</button> : <button className="small" onClick={() => show(pl.id)}>Why not yet?</button>}
                 {live.length > 0 && <Link className="btn ghost small" href={`/accounts?provider=${pl.id}`}>Manage</Link>}
               </div>
             </article>
@@ -95,14 +128,34 @@ export function ConnectionCenter({ cards, workspaces, activeWorkspaceId, metaRea
             <div className="top">
               <PlatformMedal id={p.id} />
               <div>
-                <h2 id="connect-title">Connect {p.name}</h2>
-                <div className="small muted">{p.method}</div>
+                <h2 id="connect-title">{canConnectOpen ? `Connect ${p.name}` : `${p.name} is not available yet`}</h2>
+                <div className="small muted">{canConnectOpen ? p.method : p.covers}</div>
               </div>
             </div>
 
+            {!canConnectOpen ? (
+              <div className="msg info" role="status">
+                <b>{p.note ?? `iGerald has no ${p.name} connection yet.`}</b> Nothing is missing on your side, and no sign-in was attempted. The platforms you can connect today are Instagram, Facebook, Telegram, Bluesky, Discord and Slack.
+              </div>
+            ) : all.length === 0 ? (
+              <div>
+                <div className="msg info" role="status"><b>One thing first.</b> Every account lives in a workspace — yours, your company&apos;s or a client&apos;s. Create your first one here and you go straight on to connecting {p.name}.</div>
+                <label htmlFor="first-kind">Who is it for?</label>
+                <select id="first-kind" value={first.kind} onChange={(e) => setFirst({ ...first, kind: e.target.value })}>
+                  <option value="personal">Me — my own accounts</option>
+                  <option value="business">My company</option>
+                  <option value="client">A client company</option>
+                </select>
+                <label htmlFor="first-name">{first.kind === "personal" ? "Workspace name" : "Company name"}</label>
+                <input id="first-name" type="text" value={first.name} maxLength={80} placeholder={first.kind === "personal" ? "My accounts" : "Company name"} onChange={(e) => setFirst({ ...first, name: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void createFirst(); } }} />
+                {firstErr && <div className="msg err" role="alert">{firstErr}</div>}
+                <div className="actions"><button className="primary" disabled={firstBusy} onClick={() => void createFirst()}>{firstBusy ? "Creating…" : `Create workspace and continue`}</button></div>
+              </div>
+            ) : (
+              <>
             <label htmlFor="connect-ws">Which workspace will own this account?</label>
             <select id="connect-ws" value={workspaceId} onChange={(e) => setWorkspaceId(e.target.value)}>
-              {workspaces.map((w) => <option key={w.id} value={w.id}>{w.name} — {KIND[w.kind] ?? "Company"}</option>)}
+              {all.map((w) => <option key={w.id} value={w.id}>{w.name} — {KIND[w.kind] ?? "Company"}</option>)}
             </select>
             <p className="small muted" style={{ marginTop: 6 }}>The account, its posts and its messages stay inside {ws ? <b>{ws.name}</b> : "that workspace"} and are never shown in another one.</p>
 
@@ -139,6 +192,9 @@ export function ConnectionCenter({ cards, workspaces, activeWorkspaceId, metaRea
                 <div className="small muted" style={{ marginBottom: 8 }}><b>Optional: connect through Zernio.</b> Zernio is a separate paid service; accounts connected this way are billed by Zernio on your own Zernio plan. Check their pricing before using it.</div>
                 <ConnectButton brandId={workspaceId} provider={open!} backend="zernio" label="Connect through Zernio (paid)" className="small" />
               </div>
+            )}
+
+              </>
             )}
 
             <div className="row" style={{ justifyContent: "flex-end", marginTop: 18 }}>

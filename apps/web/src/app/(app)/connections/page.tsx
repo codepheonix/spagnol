@@ -51,14 +51,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
       {sp.connected && <div className="msg ok" role="status">Connected {sp.connected} account{sp.connected === "1" ? "" : "s"}. {sp.provider ? `${platformById(sp.provider)?.name ?? sp.provider}: ` : ""}it is now listed under All accounts.</div>}
       {sp.reconnected && <div className="msg ok" role="status">Permission renewed. Scheduled posts and history for this account are kept.</div>}
       {sp.error && <div className="msg err" role="alert"><b>The connection was not completed{sp.provider ? ` (${platformById(sp.provider)?.name ?? sp.provider})` : ""}.</b> {sp.error}</div>}
-      {workspaces.length === 0 && (
-        <div className="empty" style={{ marginBottom: 18 }}>
-          <h3>Create a workspace first</h3>
-          <p>Every connected account belongs to a workspace — your own, your company&apos;s, or a client&apos;s. Create one and the Connect buttons unlock.</p>
-          <Link className="btn primary" href="/organizations?first=1">Create a workspace</Link>
-        </div>
-      )}
-      {!metaReady && workspaces.length > 0 && (
+      {!metaReady && (
         <div className="msg info">
           <b>Facebook and Instagram need one setup step.</b> Meta only opens its sign-in page for a registered app, and this installation has none yet. <Link href="/accounts/setup/meta"><b>Register the Meta app</b></Link> (free, about ten minutes), then connect as many accounts as you like.
         </div>
@@ -67,7 +60,7 @@ export default async function ConnectionsPage({ searchParams }: { searchParams: 
       <ConnectionCenter cards={cards} workspaces={workspaces} activeWorkspaceId={active?.id ?? null} metaReady={metaReady} igLoginReady={igLoginReady} zernioReady={Boolean(zernio)} openFirst={sp.connect ?? null} />
 
       <p className="small muted" style={{ maxWidth: "80ch" }}>
-        Cards marked “Not available yet” are platforms this app cannot connect to today; they have no Connect button so nothing here pretends to work. Platform names and logos belong to their owners and are shown only to identify each service.
+        Cards marked “Not available yet” are platforms this app cannot connect to today; selecting one explains why and never pretends to sign in. Platform names and logos belong to their owners and are shown only to identify each service.
       </p>
     </div>
   );
