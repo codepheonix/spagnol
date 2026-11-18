@@ -1,0 +1,12 @@
+# Secret scanning rules: the defaults, plus the places where look-alike values are expected.
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Example values, test constants and local development defaults"
+paths = [
+  '''(^|/)\.env\.example$''',
+  '''(^|/)docker-compose\.ya?ml$''',
+  '''\.test\.ts$''',
+  '''(^|/)pnpm-lock\.yaml$''',
+]

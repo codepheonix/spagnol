@@ -69,6 +69,13 @@ check("wrong passwords are answered at first, then every further attempt is bloc
 const blocked = await req("/api/auth/login", json({ email: probe, password: "wrong" }, { origin: base }));
 check("a blocked attempt says how long to wait", blocked.status === 429 && Number(blocked.headers.get("retry-after")) > 0, `retry-after ${blocked.headers.get("retry-after")}s`);
 
+// 6a. Health probe: usable by a monitor, says nothing an attacker can use
+const hp = await req("/api/health");
+const hb = await hp.json().catch(() => ({}));
+check("health probe answers without error text or secrets", ["ok", "error", "not_configured"].includes(hb.db) && !/prisma|postgres|password|schema\.|ECONN/i.test(JSON.stringify(hb)), JSON.stringify(hb).slice(0, 160));
+check("deployment and database belong to the same environment", hb.environment === "ok", `env ${hb.env}, environment ${hb.environment}`);
+if (https) check("the scheduler ran in the last five minutes", typeof hb.schedulerSecondsAgo === "number" && hb.schedulerSecondsAgo < 300, `${hb.schedulerSecondsAgo}s ago`);
+
 // 6b. Account security surfaces that need no credentials
 for (const p of ["/forgot", "/reset?token=" + "x".repeat(40)]) {
   const r = await req(p);

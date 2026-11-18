@@ -31,7 +31,11 @@ It uses each platform's official API. Not a clone of any other product's UI or s
 - Database: row level security is ON for every table and the platform's public roles hold no privilege (`docs/security/README.md`). Every new table enables it in its own migration; `security.test.ts` fails otherwise. Migrations applied to Supabase by hand run as the admin role — check the grants afterwards.
 - Sign-in attempts are counted in the database (`auth-throttle.ts`), never in server memory. The platform sign-in return must come from the signed-in user who started it. Webhooks without a configured secret are closed.
 - Pages are served with a nonce-based Content Security Policy from `middleware.ts`; inline scripts need the nonce (`x-nonce` request header). Do not add `unsafe-inline` or wildcard sources for scripts.
-- Before a release: `pnpm test`, `pnpm audit --prod`, `node scripts/security-smoke.mjs <url>`.
+- Accounts: rules live in `packages/core/src/account-security.ts`. Pages call `requireUser()` and API routes `apiUser()`/`apiSession()`; both hold an account that owes a password change or two-factor set-up (only the account's own pages and routes pass `gate: false`). Key, credential and ad-activation routes use `apiUserRecentAuth()`/`hasRecentAuth`. A session of a two-factor account opens nothing until `/api/auth/mfa`. Never log a password, code, recovery code or reset link.
+- Environments: every database carries `SystemSetting env.name`; `assertEnvironment()` (in `handle()` and the session read) refuses a deployment whose environment differs. Production secrets are scoped to Vercel's Production target only — never add one to Preview.
+- A server address supplied by a user goes through `assertPublicHttpsUrl` (`packages/integrations/src/net.ts`) before any request; no redirects, capped response size.
+- Progress and evidence: `docs/security/implementation-tracker.md` (update it in the same commit as the work) and `docs/test-evidence/`.
+- Before a release: `pnpm test`, `pnpm audit --prod`, `node scripts/security-smoke.mjs <url>`. CI (`.github/workflows/security.yml`) runs the same plus a secret scan.
 
 ## Truthfulness rules (acceptance)
 - No invented success: a target is `published` only after the provider returns a remote id (and, where the provider is async, after reconciliation).
