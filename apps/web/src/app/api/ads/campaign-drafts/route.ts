@@ -3,7 +3,7 @@ import { prisma } from "@sm/db";
 import { audit } from "@sm/core";
 import { apiBrand, apiUser, handle, json, parseJson, HttpError } from "@/lib/api";
 
-const schema = z.object({ brandId: z.string().optional(), adAccountId: z.string(), name: z.string().min(1).max(120), spec: z.object({ objective: z.string(), budget: z.object({ amount: z.number().positive(), type: z.enum(["daily", "lifetime"]) }), currency: z.string().length(3).optional(), targeting: z.record(z.unknown()).default({}), creative: z.record(z.unknown()).default({}), schedule: z.object({ start: z.string().optional(), end: z.string().optional() }).default({}) }) });
+const schema = z.object({ brandId: z.string().optional(), adAccountId: z.string(), name: z.string().min(1).max(120), spec: z.object({ objective: z.string(), budget: z.object({ amount: z.number().positive(), type: z.enum(["daily", "lifetime"]) }), currency: z.string().length(3).optional(), targeting: z.record(z.string(), z.unknown()).default({}), creative: z.record(z.string(), z.unknown()).default({}), schedule: z.object({ start: z.string().optional(), end: z.string().optional() }).default({}) }) });
 
 export const GET = handle(async (req) => {
   const user = await apiUser();

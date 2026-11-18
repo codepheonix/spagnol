@@ -1,17 +1,19 @@
 import { NextResponse } from "next/server";
 import { completeOAuthCallback, parseProvider, appUrl } from "@sm/core";
+import { getSessionUser } from "@/lib/auth";
 
 /**
- * Provider redirect target. No session is required here: the single-use state binds the callback
- * to the brand the connection was started for. Choosing among several granted assets happens on
- * the next page, which does require the owner's session.
+ * Provider redirect target. The single-use state names the workspace and the user who started the
+ * connection; the browser finishing it must be signed in as that same user (the session cookie is
+ * SameSite=Lax, so it is sent on this top-level return from the platform).
  */
 export async function GET(req: Request, { params }: { params: Promise<{ provider: string }> }) {
   const { provider } = await params;
   const url = new URL(req.url);
   const qp = Object.fromEntries(url.searchParams.entries());
   try {
-    const r = await completeOAuthCallback(parseProvider(provider), qp);
+    const user = await getSessionUser();
+    const r = await completeOAuthCallback(parseProvider(provider), qp, user?.id ?? null);
     if (r.pendingState) return NextResponse.redirect(`${appUrl()}/accounts/choose?state=${encodeURIComponent(r.pendingState)}`);
     return NextResponse.redirect(`${appUrl()}/connections?${r.reconnected ? "reconnected" : "connected"}=${r.accounts.length}&provider=${provider}`);
   } catch (err) {

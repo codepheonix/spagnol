@@ -14,4 +14,5 @@ export * from "./ai";
 export * from "./private-replies";
 export * from "./architecture";
 export * from "./workspaces";
+export * from "./auth-throttle";
 export * from "./handlers";

@@ -1,23 +1,29 @@
 import { prisma } from "@sm/db";
 import { verifyHmacSignature } from "@sm/security";
+import { audit } from "./audit";
 import { enqueue } from "./queue";
 import { getZernioConfig } from "./settings";
 import { notify } from "./audit";
 import { rollupPostStatus } from "./posts";
 
 /**
- * Ingests a Zernio webhook delivery: verify signature (when a secret is configured), dedupe on
- * X-Zernio-Event-Id, store, then react (inbox sync, post status reconciliation).
+ * Ingests a Zernio webhook delivery. Nothing is accepted unless it is signed:
+ *   - no webhook secret configured  -> the endpoint is closed ("disabled"); nothing is stored;
+ *   - signature missing or wrong    -> "rejected"; nothing is stored.
+ * Zernio signs with the secret given when the endpoint is created: `X-Zernio-Signature` is the
+ * lowercase hex HMAC-SHA256 of the raw body (https://docs.zernio.com/webhooks). The signature has
+ * no timestamp, so replays are stopped by the unique event id (`X-Zernio-Event-Id`).
  */
-export async function ingestZernioWebhook(input: { rawBody: string; headers: Record<string, string | null | undefined> }): Promise<{ status: "stored" | "duplicate" | "rejected"; reason?: string }> {
+export async function ingestZernioWebhook(input: { rawBody: string; headers: Record<string, string | null | undefined> }): Promise<{ status: "stored" | "duplicate" | "rejected" | "disabled"; reason?: string }> {
   const z = await getZernioConfig();
   const eventId = input.headers["x-zernio-event-id"] ?? input.headers["x-late-event-id"];
   const eventType = input.headers["x-zernio-event"] ?? input.headers["x-late-event"] ?? "unknown";
   const signature = input.headers["x-zernio-signature"] ?? input.headers["x-late-signature"];
-  let signatureValid = false;
-  if (z?.webhookSecret) {
-    signatureValid = verifyHmacSignature(z.webhookSecret, input.rawBody, signature);
-    if (!signatureValid) return { status: "rejected", reason: "bad signature" };
+  if (!z?.webhookSecret) return { status: "disabled", reason: "no webhook secret is configured" };
+  const signatureValid = verifyHmacSignature(z.webhookSecret, input.rawBody, signature);
+  if (!signatureValid) {
+    await audit({ action: "webhook.rejected", outcome: "denied", targetType: "webhook", targetId: "zernio", details: { reason: signature ? "bad signature" : "missing signature", eventType } }).catch(() => undefined);
+    return { status: "rejected", reason: signature ? "bad signature" : "missing signature" };
   }
   let payload: Record<string, unknown>;
   try {

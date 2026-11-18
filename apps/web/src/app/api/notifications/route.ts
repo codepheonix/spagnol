@@ -9,8 +9,9 @@ export const GET = handle(async () => {
 });
 
 export const POST = handle(async (req) => {
-  await apiUser();
+  const user = await apiUser();
   const { ids } = await parseJson(req, z.object({ ids: z.array(z.string()).max(100) }));
-  await prisma.notification.updateMany({ where: { id: { in: ids } }, data: { readAt: new Date() } });
+  // Only the signed-in user's own notifications (their workspaces, or installation-wide ones).
+  await prisma.notification.updateMany({ where: { id: { in: ids }, OR: [{ brandId: null }, { brand: { ownerId: user.id } }] }, data: { readAt: new Date() } });
   return json({ ok: true });
 });

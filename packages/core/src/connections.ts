@@ -162,14 +162,30 @@ export interface CallbackOutcome {
   reconnected?: boolean;
 }
 
-/** Step 2: provider redirected back. Verifies state exactly once, exchanges server-side, then persists or asks the owner to choose. */
-export async function completeOAuthCallback(provider: ProviderId, params: Record<string, string>): Promise<CallbackOutcome> {
+/**
+ * Step 2: provider redirected back. Verifies state exactly once, exchanges server-side, then persists or asks the owner to choose.
+ *
+ * `sessionUserId` is the user signed in on the browser that is finishing the sign-in. It must be the
+ * same user who started it: without this check a prepared sign-in link could make someone else
+ * connect their account into the workspace of whoever prepared the link. The workspace is checked
+ * again as well (still owned by that user, not archived). A mismatch consumes nothing, so the real
+ * owner can still finish within the 15 minutes.
+ */
+export async function completeOAuthCallback(provider: ProviderId, params: Record<string, string>, sessionUserId: string | null): Promise<CallbackOutcome> {
   const state = params.state;
   if (!state) throw new AppError("Missing OAuth state.", 400, "oauth_state");
   const row = await prisma.oAuthState.findUnique({ where: { state } });
   if (!row || row.provider !== provider) throw new AppError("Unknown OAuth state (possible replay or mismatch).", 400, "oauth_state");
   if (row.consumedAt) throw new AppError("This sign-in link was already used. Start the connection again.", 400, "oauth_replay");
   if (row.expiresAt < new Date()) throw new AppError("The sign-in took longer than 15 minutes — start the connection again.", 400, "oauth_expired");
+  const startedBy = ((row.payload ?? {}) as OAuthPayload).userId;
+  if (!sessionUserId) throw new AppError("Sign in to iGerald in this browser, then start the connection again.", 401, "oauth_no_session");
+  if (!startedBy || startedBy !== sessionUserId) {
+    await audit({ actorUserId: sessionUserId, brandId: row.brandId, action: "connection.complete", outcome: "denied", targetType: "provider", targetId: provider, details: { reason: "session does not match the user who started this sign-in" } });
+    throw new AppError("This sign-in was started by a different iGerald user. Start the connection again from your own account.", 403, "oauth_session_mismatch");
+  }
+  const workspace = await prisma.brand.findFirst({ where: { id: row.brandId, ownerId: sessionUserId, archivedAt: null }, select: { id: true } });
+  if (!workspace) throw new AppError("The workspace this sign-in was started for is no longer available to you.", 403, "oauth_workspace");
   // Anti-replay: consume atomically.
   const consumed = await prisma.oAuthState.updateMany({ where: { id: row.id, consumedAt: null }, data: { consumedAt: new Date() } });
   if (consumed.count !== 1) throw new AppError("This sign-in link was already used. Start the connection again.", 400, "oauth_replay");

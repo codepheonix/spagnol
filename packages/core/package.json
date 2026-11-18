@@ -18,7 +18,7 @@
     "@sm/media": "workspace:*",
     "@sm/security": "workspace:*",
     "pino": "^9.6.0",
-    "zod": "^3.24.1"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

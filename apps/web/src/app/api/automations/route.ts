@@ -6,7 +6,7 @@ import { apiBrand, apiUser, handle, json, parseJson } from "@/lib/api";
 const TRIGGERS = ["publish_completed", "publish_failed", "account_disconnected", "comment_keyword", "message_received", "lead_received", "review_received"] as const;
 const ACTIONS = ["notify_owner", "create_draft", "tag_contact"] as const;
 
-const schema = z.object({ brandId: z.string().optional(), name: z.string().min(1).max(120), trigger: z.object({ type: z.enum(TRIGGERS), filters: z.record(z.unknown()).default({}) }), actions: z.array(z.object({ type: z.enum(ACTIONS), params: z.record(z.unknown()).default({}) })).min(1).max(5), enabled: z.boolean().default(false), cooldownMinutes: z.number().int().min(1).max(10080).default(60), perContactCap: z.number().int().min(1).max(50).default(3) });
+const schema = z.object({ brandId: z.string().optional(), name: z.string().min(1).max(120), trigger: z.object({ type: z.enum(TRIGGERS), filters: z.record(z.string(), z.unknown()).default({}) }), actions: z.array(z.object({ type: z.enum(ACTIONS), params: z.record(z.string(), z.unknown()).default({}) })).min(1).max(5), enabled: z.boolean().default(false), cooldownMinutes: z.number().int().min(1).max(10080).default(60), perContactCap: z.number().int().min(1).max(50).default(3) });
 
 export const GET = handle(async (req) => {
   const user = await apiUser();

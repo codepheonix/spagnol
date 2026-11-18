@@ -5,7 +5,7 @@ import { apiBrand, apiUser, handle, json, parseJson } from "@/lib/api";
 const schema = z.object({
   backend: z.enum(["native", "zernio"]).default("native"),
   /** e.g. { loginMethod: "facebook_login" | "instagram_login" } */
-  options: z.record(z.string()).optional(),
+  options: z.record(z.string(), z.string()).optional(),
   /** Refresh the permission of an existing account record instead of adding a new one. */
   reconnectAccountId: z.string().optional(),
 });

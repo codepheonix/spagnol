@@ -31,6 +31,17 @@ model User {
   auditLogs    AuditLog[]
 }
 
+/// Failed sign-in counters shared by every server instance (a counter kept in one server's memory
+/// does not limit anything when requests are spread over many). `key` is a SHA-256 hash, so no
+/// e-mail address or IP address is stored in clear.
+model AuthThrottle {
+  key          String    @id
+  failures     Int       @default(0)
+  windowStart  DateTime  @default(now())
+  blockedUntil DateTime?
+  updatedAt    DateTime  @default(now()) @updatedAt
+}
+
 model Session {
   id        String   @id @default(cuid())
   userId    String

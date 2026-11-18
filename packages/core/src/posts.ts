@@ -15,7 +15,7 @@ export const postInputSchema = z.object({
   campaignTag: z.string().max(80).optional().nullable(),
   mediaIds: z.array(z.string()).max(20).default([]),
   targets: z
-    .array(z.object({ socialAccountId: z.string(), overrides: z.record(z.unknown()).default({}) }))
+    .array(z.object({ socialAccountId: z.string(), overrides: z.record(z.string(), z.unknown()).default({}) }))
     .default([]),
   scheduledAt: z.string().datetime().optional().nullable(),
   scheduleTimezone: z.string().max(64).optional().nullable(),

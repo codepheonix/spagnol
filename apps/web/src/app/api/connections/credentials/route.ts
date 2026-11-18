@@ -2,7 +2,7 @@ import { z } from "zod";
 import { connectWithCredentials, parseProvider } from "@sm/core";
 import { apiBrand, apiUser, handle, json, parseJson } from "@/lib/api";
 
-const schema = z.object({ brandId: z.string().optional(), provider: z.string(), fields: z.record(z.string()) });
+const schema = z.object({ brandId: z.string().optional(), provider: z.string(), fields: z.record(z.string(), z.string()) });
 
 /** Credential-form connections (Telegram, Bluesky, Discord, Slack). Secrets go straight to the encrypted store. */
 export const POST = handle(async (req) => {

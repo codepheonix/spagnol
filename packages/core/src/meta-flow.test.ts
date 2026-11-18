@@ -175,11 +175,17 @@ describe.skipIf(!dbOk)("Facebook + Instagram via a stand-in Graph API", () => {
     expect(url.toString()).not.toContain("test-app-secret");
     const state = url.searchParams.get("state")!;
 
+    // The return from the platform must come from the browser of the user who started it.
+    await expect(core.completeOAuthCallback("instagram", { code: "auth-code", state }, null)).rejects.toThrow(/Sign in to iGerald/);
+    await expect(core.completeOAuthCallback("instagram", { code: "auth-code", state }, userB.id)).rejects.toThrow(/different iGerald user/);
+    expect(await prisma.socialAccount.count({ where: { brandId: brand.id } })).toBe(0);
+    expect((await prisma.oAuthState.findUnique({ where: { state } }))?.consumedAt).toBeNull(); // refused attempts do not use up the link
+
     // Several assets were granted → nothing is attached until the owner chooses.
-    const outcome = await core.completeOAuthCallback("instagram", { code: "auth-code", state });
+    const outcome = await core.completeOAuthCallback("instagram", { code: "auth-code", state }, userA.id);
     expect(outcome.pendingState).toBe(state);
     expect(await prisma.socialAccount.count({ where: { brandId: brand.id } })).toBe(0);
-    await expect(core.completeOAuthCallback("instagram", { code: "auth-code", state })).rejects.toThrow(/already used/);
+    await expect(core.completeOAuthCallback("instagram", { code: "auth-code", state }, userA.id)).rejects.toThrow(/already used/);
 
     // Only the owner can see the choice, and it lists identities — never tokens.
     await expect(core.getPendingSelection(userB.id, state)).rejects.toThrow();
@@ -295,7 +301,7 @@ describe.skipIf(!dbOk)("Facebook + Instagram via a stand-in Graph API", () => {
 
     const start = await core.startConnection({ brandId: brand.id, userId: userA.id, provider: "facebook", backend: "native", reconnectAccountId: fb.id });
     const state = new URL(start.redirectUrl!).searchParams.get("state")!;
-    const r = await core.completeOAuthCallback("facebook", { code: "c", state });
+    const r = await core.completeOAuthCallback("facebook", { code: "c", state }, userA.id);
     expect(r.reconnected).toBe(true);
     expect(r.accounts.map((a) => a.id)).toEqual([fb.id]);
     expect((await prisma.socialAccount.findUniqueOrThrow({ where: { id: fb.id } })).status).toBe("connected");
@@ -304,7 +310,7 @@ describe.skipIf(!dbOk)("Facebook + Instagram via a stand-in Graph API", () => {
     const saved = fake.pages;
     fake.pages = [saved[1]!]; // the person signs in but only allows a different Page
     const start2 = await core.startConnection({ brandId: brand.id, userId: userA.id, provider: "facebook", backend: "native", reconnectAccountId: fb.id });
-    await expect(core.completeOAuthCallback("facebook", { code: "c", state: new URL(start2.redirectUrl!).searchParams.get("state")! })).rejects.toThrow(/Nothing was changed/);
+    await expect(core.completeOAuthCallback("facebook", { code: "c", state: new URL(start2.redirectUrl!).searchParams.get("state")! }, userA.id)).rejects.toThrow(/Nothing was changed/);
     fake.pages = saved;
     expect((await core.loadCredentials(fb.id)).pageAccessToken).toBe("PAGE_TOKEN_1");
   });

@@ -28,6 +28,10 @@ It uses each platform's official API. Not a clone of any other product's UI or s
 - Provider app credentials (Meta app id/secret) are entered at `/accounts/setup/meta`, verified with the provider, and stored encrypted in `SystemSetting app.<NAME>`; env vars of the same name are a fallback. Never returned to the browser.
 - Webhooks: verify HMAC when a secret exists; dedupe on provider event id (`WebhookEvent` unique).
 - Mutating `/api` calls require same-origin (`middleware.ts`) and a valid session.
+- Database: row level security is ON for every table and the platform's public roles hold no privilege (`docs/security/README.md`). Every new table enables it in its own migration; `security.test.ts` fails otherwise. Migrations applied to Supabase by hand run as the admin role — check the grants afterwards.
+- Sign-in attempts are counted in the database (`auth-throttle.ts`), never in server memory. The platform sign-in return must come from the signed-in user who started it. Webhooks without a configured secret are closed.
+- Pages are served with a nonce-based Content Security Policy from `middleware.ts`; inline scripts need the nonce (`x-nonce` request header). Do not add `unsafe-inline` or wildcard sources for scripts.
+- Before a release: `pnpm test`, `pnpm audit --prod`, `node scripts/security-smoke.mjs <url>`.
 
 ## Truthfulness rules (acceptance)
 - No invented success: a target is `published` only after the provider returns a remote id (and, where the provider is async, after reconciliation).

@@ -19,13 +19,13 @@
     "postinstall": "prisma generate"
   },
   "dependencies": {
-    "@prisma/client": "^6.3.1",
+    "@prisma/client": "^6.19.3",
     "@sm/security": "workspace:*",
     "dotenv": "^18.0.9"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "prisma": "^6.3.1",
+    "prisma": "^6.19.3",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   },
