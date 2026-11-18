@@ -7,7 +7,8 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./session": "./src/session.ts"
+    "./session": "./src/session.ts",
+    "./redirect": "./src/redirect.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json",
