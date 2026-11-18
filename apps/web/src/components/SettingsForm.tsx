@@ -28,7 +28,7 @@ export function SettingsForm({ current }: { current: { zernioApiKey: boolean; ze
       </div>
       <div className="card">
         <h3 style={{ marginTop: 0 }}>Owner</h3>
-        <div className="row"><div><label>Language</label><select value={f.locale} onChange={(e) => setF({ ...f, locale: e.target.value })}><option value="it">Italiano</option><option value="en">English</option></select></div><div><label>Timezone</label><input type="text" value={f.timezone} onChange={(e) => setF({ ...f, timezone: e.target.value })} /></div></div>
+        <div className="row"><div><label>Language</label><select value={f.locale} onChange={(e) => setF({ ...f, locale: e.target.value })}><option value="en">English</option><option value="it">Italiano</option></select></div><div><label>Timezone</label><input type="text" value={f.timezone} onChange={(e) => setF({ ...f, timezone: e.target.value })} /></div></div>
         <div style={{ marginTop: 8 }}><button onClick={() => save({ locale: f.locale, timezone: f.timezone })}>Save owner settings</button></div>
         <h3>Change password</h3>
         <label>Current</label><input type="password" value={pw.currentPassword} onChange={(e) => setPw({ ...pw, currentPassword: e.target.value })} autoComplete="current-password" />

@@ -6,7 +6,7 @@ import { audit } from "@sm/core";
 
 export const SESSION_COOKIE = "sm_session";
 export const BRAND_COOKIE = "sm_brand";
-export const LOCALE_COOKIE = "sm_locale";
+export const LOCALE_COOKIE = "ig_locale";
 const SESSION_TTL = 60 * 60 * 24 * 14; // 14 days
 
 export async function getSessionUser(): Promise<User | null> {

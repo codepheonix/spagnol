@@ -24,7 +24,7 @@ export function SlotEditor({ brandId, timezone, slots, accounts }: { brandId: st
         <input type="time" value={time} onChange={(e) => setTime(e.target.value)} style={{ width: 110 }} />
         <select value={acct} onChange={(e) => setAcct(e.target.value)} style={{ width: 200 }}><option value="">all accounts</option>{accounts.map((a) => <option key={a.id} value={a.id}>{a.displayName}</option>)}</select>
         <button onClick={async () => { setErr(null); try { await api("/api/queues", { method: "POST", json: { brandId, weekday, time, timezone, socialAccountId: acct || null } }); router.refresh(); } catch (e) { setErr((e as Error).message); } }}>Add slot</button>
-        <button onClick={async () => { const r = await api<{ next: string | null }>(`/api/queues/next-slot?brandId=${brandId}`); setNext(r.next ? new Date(r.next).toLocaleString("it-IT", { timeZone: timezone }) : "none"); }}>Next free slot</button>
+        <button onClick={async () => { const r = await api<{ next: string | null }>(`/api/queues/next-slot?brandId=${brandId}`); setNext(r.next ? new Date(r.next).toLocaleString("en-GB", { timeZone: timezone }) : "none"); }}>Next free slot</button>
         {next && <span className="small">→ {next}</span>}
       </div>
       {err && <div className="msg err">{err}</div>}

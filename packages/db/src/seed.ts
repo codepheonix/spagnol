@@ -27,7 +27,7 @@ async function main() {
         name,
         passwordHash: await hashPassword(password),
         timezone: process.env.DEFAULT_TIMEZONE ?? "Europe/Rome",
-        locale: process.env.DEFAULT_LOCALE ?? "it",
+        locale: "en",
       },
     });
     // No workspace is seeded: a new installation starts neutral and the owner adds their own.

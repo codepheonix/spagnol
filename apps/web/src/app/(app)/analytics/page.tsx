@@ -12,7 +12,7 @@ export default async function AnalyticsPage({ searchParams }: { searchParams: Pr
   const days = Number(sp.days ?? 30);
   const from = new Date(Date.now() - days * 86_400_000);
   const [overview, posts] = await Promise.all([analyticsOverview(brand.id), postAnalytics(brand.id, { from, to: new Date() })]);
-  const fmt = (v: number | null | undefined) => (v === null || v === undefined ? <span className="muted">—</span> : Number.isInteger(v) ? v.toLocaleString("it-IT") : v.toFixed(3));
+  const fmt = (v: number | null | undefined) => (v === null || v === undefined ? <span className="muted">—</span> : Number.isInteger(v) ? v.toLocaleString("en-GB") : v.toFixed(3));
   return (
     <div>
       <h1>Analytics — {brand.name}</h1>

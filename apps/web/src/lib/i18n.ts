@@ -75,8 +75,9 @@ export type Key = keyof typeof dict.en;
 
 export async function getLocale(): Promise<Locale> {
   const jar = await cookies();
-  const v = jar.get("sm_locale")?.value;
-  return v === "en" || v === "it" ? v : ((process.env.DEFAULT_LOCALE as Locale) ?? "it");
+  // English unless this browser has chosen Italian with the language switch (profile menu).
+  const v = jar.get("ig_locale")?.value;
+  return v === "it" ? "it" : "en";
 }
 
 export async function t(): Promise<(k: Key) => string> {

@@ -19,7 +19,7 @@ export const POST = handle(async (req) => {
     await audit({ actorUserId: user.id, action: "auth.claim" });
     return json({ ok: true });
   }
-  const user = await prisma.user.create({ data: { email: input.email.toLowerCase(), name: input.name, passwordHash: await hashPassword(input.password), timezone: process.env.DEFAULT_TIMEZONE ?? "Europe/Rome", locale: process.env.DEFAULT_LOCALE ?? "it" } });
+  const user = await prisma.user.create({ data: { email: input.email.toLowerCase(), name: input.name, passwordHash: await hashPassword(input.password), timezone: process.env.DEFAULT_TIMEZONE ?? "Europe/Rome", locale: "en" } });
   // No workspace is created here: a new installation starts neutral and the owner chooses what to add.
   await audit({ actorUserId: user.id, action: "auth.setup" });
   return json({ ok: true });

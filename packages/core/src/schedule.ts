@@ -31,7 +31,7 @@ export function localToUtc(dateStr: string, timeStr: string, timeZone: string): 
   return guess;
 }
 
-export function formatInZone(date: Date, timeZone: string, locale = "it-IT"): string {
+export function formatInZone(date: Date, timeZone: string, locale = "en-GB"): string {
   return new Intl.DateTimeFormat(locale, { timeZone, dateStyle: "medium", timeStyle: "short" }).format(date);
 }
 
