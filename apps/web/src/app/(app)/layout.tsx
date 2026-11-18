@@ -15,7 +15,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const tr = await t();
   const locale = await getLocale();
   const work: Array<[string, string]> = [["/", tr("dashboard")], ["/posts", tr("posts")], ["/calendar", tr("calendar")], ["/media", tr("media")], ["/inbox", tr("inbox")], ["/analytics", tr("analytics")], ["/ads", tr("ads")], ["/automations", tr("automations")]];
-  const manage: Array<[string, string]> = [["/accounts", tr("accounts")], ["/brands", tr("brands")], ["/health", tr("health")], ["/activity", tr("activity")], ["/settings", tr("settings")]];
+  const manage: Array<[string, string]> = [["/accounts", tr("accounts")], ["/brands", tr("brands")], ["/health", tr("health")], ["/architecture", locale === "it" ? "Architettura" : "Architecture"], ["/activity", tr("activity")], ["/settings", tr("settings")]];
   return (
     <div className="shell">
       <nav className="nav">

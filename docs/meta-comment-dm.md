@@ -95,7 +95,7 @@ app owner's own media), and the webhook endpoint already answers Meta's verifica
 5. Comment `Bellissimo!` → row *no DM · no keyword match*; the account receives nothing.
 6. Activity shows `automation.private_reply.sent` / `.skipped` with the comment ids.
 Record the result in `docs/test-evidence/` and set `instagram.private_reply` to `LIVE_VERIFIED` in
-`docs/provider-capabilities.md` only when step 3 showed one real message.
+`docs/integrations/provider-capabilities.md` only when step 3 showed one real message.
 
 ## 7 · Facebook Page Comment → Messenger (same rule editor, verify separately)
 Rule with the Facebook account + a Page post. Comment event = Page `feed` webhook item `comment`,
@@ -112,7 +112,7 @@ account's credentials carry `igUserToken`). Private reply: `POST graph.instagram
 Signature: that app's App secret (`INSTAGRAM_APP_SECRET`) — the endpoint accepts either secret.
 
 ## Verification status
-Verified against a stand-in Graph server (`packages/core/src/private-replies.test.ts`, 13 tests) and
+Verified against a stand-in Graph server (`packages/core/src/private-replies.test.ts`, 14 tests) and
 in a browser walkthrough (rule saved from the real page; signed webhook delivered twice → one reply;
 unrelated comment → no DM; outcomes in Automations and Activity). **Not verified on real Instagram or
 Facebook**: no real account is connected to the app yet (milestone 1 is itself still awaiting its

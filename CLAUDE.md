@@ -27,10 +27,16 @@ Reproduces Zernio's *functional categories* with lawful official APIs. Not a clo
 - Unsupported operations show capability states (`unsupported`, `needs_approval`, …), never silent no-ops or fake buttons.
 - Analytics: absent metric = `null`/dash, never 0. Every metric carries its `source`.
 - Ads: read-only by default; activation needs a fresh confirmation token minted by a user action; the write path stays disabled until read sync is LIVE_VERIFIED.
-- Implementation status per provider lives in `docs/provider-capabilities.md`. `LIVE_VERIFIED` only with evidence in `docs/test-evidence/`.
+- Implementation status per provider lives in `docs/integrations/provider-capabilities.md`. `LIVE_VERIFIED` only with evidence in `docs/test-evidence/`.
 
 ## No-design-loop rule
 UI is deliberately minimal (plain CSS). Do not spend time on visual polish unless usability is blocked. Once a feature passes its objective test, move on.
 
 ## Commands
 `pnpm infra:up` (Postgres + MinIO via Docker) · `pnpm db:migrate:dev` · `pnpm db:seed` · `pnpm dev` · `pnpm dev:worker` · `pnpm test` · `pnpm typecheck` · `pnpm smoke` (needs a running web with `TELEGRAM_API_BASE=http://127.0.0.1:8089`) · `pnpm backup`.
+
+## Architecture diagrams (single source — keep in sync)
+- The five diagrams live in `packages/core/src/architecture/diagrams.ts`. The `/architecture` page (React Flow) and `docs/architecture/*.mmd` are generated from it: run `pnpm diagrams` after editing; a test fails when the files are stale.
+- Each node declares its `state` (implemented, partial, planned, optional, external, candidate). Planned/candidate nodes carry no probe and always show as Disabled. When a service interface changes, update its node in the same commit.
+- Live status (`architecture/status.ts`) reads real records only — never add simulated or random health. Run traces (`architecture/runs.ts`) mark stages the system does not have as `skipped`.
+- Unified-platform work happens on branch `unified-platform`; the audit and the open decisions are in `docs/audit/phase-0-audit.md`.

@@ -207,9 +207,21 @@ export async function ingestMetaWebhook(input: { rawBody: string; signature: str
   return { status: "ok", httpStatus: 200, handled, duplicates };
 }
 
-async function accountForSubject(provider: "instagram" | "facebook", subjectExternalId: string): Promise<SocialAccount | null> {
-  if (provider === "facebook") return prisma.socialAccount.findFirst({ where: { provider: "facebook", backend: "native", externalAccountId: subjectExternalId, status: { not: "disconnected" } } });
-  return prisma.socialAccount.findFirst({ where: { provider: "instagram", backend: "native", externalAccountId: subjectExternalId, status: { not: "disconnected" } } });
+/**
+ * The connected account an event belongs to. The same Page / Instagram account can be attached to
+ * more than one brand; the one whose brand has a rule for this post wins (an enabled rule first), so
+ * a comment is handled once, by the brand that asked for it.
+ */
+async function accountForSubject(provider: "instagram" | "facebook", subjectExternalId: string, externalPostId: string): Promise<SocialAccount | null> {
+  const candidates = await prisma.socialAccount.findMany({ where: { provider, backend: "native", externalAccountId: subjectExternalId, status: { not: "disconnected" } }, orderBy: { createdAt: "asc" } });
+  if (candidates.length <= 1) return candidates[0] ?? null;
+  let withRule: SocialAccount | null = null;
+  for (const acc of candidates) {
+    const rules = (await listPrivateReplyRules(acc.brandId)).filter((r) => r.socialAccountId === acc.id && r.externalPostId === externalPostId);
+    if (rules.some((r) => r.enabled)) return acc;
+    if (rules.length && !withRule) withRule = acc;
+  }
+  return withRule ?? candidates[0]!;
 }
 
 /**
@@ -217,7 +229,7 @@ async function accountForSubject(provider: "instagram" | "facebook", subjectExte
  * Returns what happened; never throws for business reasons (a webhook must always be answered 200).
  */
 export async function handleIncomingComment(c: IncomingComment): Promise<{ outcome: "queued" | "skipped" | "duplicate" | "ignored"; note?: string; privateReplyId?: string }> {
-  const account = await accountForSubject(c.provider, c.subjectExternalId);
+  const account = await accountForSubject(c.provider, c.subjectExternalId, c.externalPostId);
   if (!account) return { outcome: "ignored", note: `no connected ${c.provider} account ${c.subjectExternalId}` };
   if (c.authorId && c.authorId === account.externalAccountId) return { outcome: "ignored", note: "own comment" };
   const rules = (await listPrivateReplyRules(account.brandId)).filter((r) => r.socialAccountId === account.id && r.externalPostId === c.externalPostId);
@@ -265,7 +277,18 @@ export async function sendPrivateReplyJob(privateReplyId: string, attempt: numbe
     await prisma.privateReply.update({ where: { id: row.id }, data: { status: "failed", error: "private replies are not supported for this account", errorCategory: "unsupported" } });
     throw new PermanentJobError("unsupported");
   }
-  const ctx = await buildAccountContext(account);
+  // Reading the stored token can fail (encryption key changed, row damaged). Nothing has been sent
+  // at this point, so the row must not stay at `sending`: record it as failed and tell the owner.
+  let ctx: Awaited<ReturnType<typeof buildAccountContext>>;
+  try {
+    ctx = await buildAccountContext(account);
+  } catch {
+    const msg = "The saved sign-in for this account could not be read. Reconnect the account, then press Retry. Nothing was sent.";
+    await prisma.privateReply.update({ where: { id: row.id }, data: { status: "failed", error: msg, errorCategory: "auth_expired" } });
+    await audit({ brandId: row.brandId, action: "automation.private_reply.failed", targetType: "comment", targetId: row.externalCommentId, outcome: "error", details: { account: account.displayName, post: row.externalPostId, category: "auth_expired", error: "stored credentials unreadable" } });
+    await notify({ brandId: row.brandId, level: "error", title: `Comment → DM failed on ${account.displayName}`, body: msg, link: "/accounts" });
+    throw new PermanentJobError("stored credentials unreadable");
+  }
   try {
     const r = await adapter.sendPrivateReply(ctx, { externalCommentId: row.externalCommentId, text: row.replyText });
     await prisma.privateReply.update({ where: { id: row.id }, data: { status: "sent", sentAt: new Date(), providerMessageId: r.providerMessageId, providerRecipientId: r.providerRecipientId ?? null, error: null, errorCategory: null } });
@@ -356,7 +379,14 @@ export async function pollPrivateReplyRulesJob(): Promise<unknown> {
     if (!account || account.status === "disconnected") continue;
     const adapter = adapterFor(account);
     if (!adapter.fetchComments) continue;
-    const ctx = await buildAccountContext(account);
+    // One account whose saved sign-in cannot be read must not stop the poll for every other account.
+    let ctx: Awaited<ReturnType<typeof buildAccountContext>>;
+    try {
+      ctx = await buildAccountContext(account);
+    } catch {
+      await prisma.socialAccount.update({ where: { id: account.id }, data: { metadata: { ...(account.metadata as object), pollError: "saved sign-in could not be read — reconnect the account", pollErrorAt: new Date().toISOString() } } }).catch(() => undefined);
+      continue;
+    }
     for (const post of new Set(accountRules.map((r) => r.externalPostId))) {
       try {
         const page = await adapter.fetchComments(ctx, { externalPostId: post });

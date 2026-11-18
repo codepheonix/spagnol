@@ -68,7 +68,7 @@ export interface CapabilityNote {
   reason?: string;
 }
 
-/** Implementation status recorded per provider (see docs/provider-capabilities.md). */
+/** Implementation status recorded per provider (see docs/integrations/provider-capabilities.md). */
 export type ImplementationStatus =
   | "LIVE_VERIFIED"
   | "CODE_COMPLETE_NEEDS_CREDENTIALS"

@@ -1,0 +1,37 @@
+%% GENERATED from packages/core/src/architecture/diagrams.ts — run `pnpm diagrams`; do not edit by hand.
+%% Paid advertising: From ad account to optimisation. Reading and drafts exist; the native Meta Marketing adapter and the write path are not built, and spend always needs a person’s confirmation.
+flowchart TD
+  company["Select company + advertising account<br/><i>partial</i>"]:::partial
+  strategy["OpenRouter: analyse goals and past results<br/><i>planned</i>"]:::planned
+  draft["Campaign, creative and budget draft"]:::implemented
+  budget["Validate platform and budget rules<br/><i>partial</i>"]:::partial
+  approved{"Approved or pre-authorised?"}:::implemented
+  request["Request approval"]:::implemented
+  adapter["Advertising adapter<br/><i>planned</i>"]:::planned
+  provider["Official advertising API"]:::external
+  status["Actual campaign status<br/><i>partial</i>"]:::partial
+  spend["Spend + conversion tracking<br/><i>partial</i>"]:::partial
+  optimise["AI optimisation proposal<br/><i>planned</i>"]:::planned
+  stop["Audit log / emergency stop<br/><i>partial</i>"]:::partial
+  denied["Authorisation failed"]:::implemented
+  company --> strategy
+  strategy --> draft
+  draft --> budget
+  budget --> approved
+  approved -->|"no"| request
+  request --> adapter
+  approved -->|"yes"| adapter
+  adapter --> provider
+  adapter -.->|"not authorised"| denied
+  provider --> status
+  provider --> stop
+  status --> spend
+  spend --> optimise
+  optimise ==>|"proposal"| budget
+  stop -.->|"pause"| provider
+  classDef implemented fill:#12352b,stroke:#6fb89b,color:#ede8e2
+  classDef partial fill:#3a3115,stroke:#d9a441,color:#ede8e2
+  classDef planned fill:#272422,stroke:#918982,color:#b8b0a8,stroke-dasharray:5 4
+  classDef candidate fill:#272422,stroke:#8daad4,color:#b8b0a8,stroke-dasharray:5 4
+  classDef optional fill:#1f2a3a,stroke:#8daad4,color:#ede8e2,stroke-dasharray:2 3
+  classDef external fill:#1b1917,stroke:#4a4440,color:#ede8e2

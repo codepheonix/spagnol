@@ -3,7 +3,7 @@
  * logic — sign-in state handling, choosing accounts per brand, encrypted tokens, scheduled sending,
  * per-account results, retrying one account only, and checking the network before re-sending after
  * an interrupted send. It does NOT prove Meta accepts our requests: that needs real accounts and is
- * tracked as LIVE verification in docs/provider-capabilities.md.
+ * tracked as LIVE verification in docs/integrations/provider-capabilities.md.
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";

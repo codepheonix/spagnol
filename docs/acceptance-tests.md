@@ -14,7 +14,7 @@ Local proofs (already passing): `pnpm test` (security, media, integrations stub,
 9. **Inbox** — one real received comment/DM → exactly one local record; one authorized reply visible on the platform.
 10. **Analytics** — a nonzero metric matches the platform dashboard (±provider delay); a metric the platform does not expose is absent in the API response and shown as "—".
 11. **Ads (read)** — synced campaigns match Ads Manager names/status/budgets; pause/resume receipt saved; activation without a confirmation token is refused (`confirmation_required`).
-12. **Report** — evidence file written; status table in `docs/provider-capabilities.md` updated.
+12. **Report** — evidence file written; status table in `docs/integrations/provider-capabilities.md` updated.
 
 ## Ops
 - Worker outage: stop worker with a job running → within `JOB_LOCK_TTL_MS` it is reclaimed and completes (covered by `queue.test.ts › reclaims jobs orphaned by a crashed worker`).

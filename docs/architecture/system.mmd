@@ -1,0 +1,48 @@
+%% GENERATED from packages/core/src/architecture/diagrams.ts — run `pnpm diagrams`; do not edit by hand.
+%% System architecture: Every service of the platform as it runs today, the optional Zernio branch, and the open-source components still under evaluation.
+flowchart TD
+  ui["Unified web dashboard"]:::implemented
+  auth["Authentication + brand permissions<br/><i>partial</i>"]:::partial
+  api["Central API"]:::implemented
+  ai["OpenRouter AI brain<br/><i>partial</i>"]:::partial
+  queue["Workflow orchestration: job queue + scheduler"]:::implemented
+  router["Account connection router"]:::implemented
+  publishing["Publishing engine (native)"]:::implemented
+  inbox["Inbox + Comment → DM engine"]:::implemented
+  ads["Advertising engine<br/><i>partial</i>"]:::partial
+  media["Creative + media engine<br/><i>partial</i>"]:::partial
+  native["Direct official APIs"]:::external
+  zernio["Optional Zernio provider<br/><i>optional</i>"]:::optional
+  platforms(["Facebook · Instagram · others"]):::external
+  analytics["Analytics collection<br/><i>partial</i>"]:::partial
+  db[("PostgreSQL: brands, content, leads")]:::implemented
+  postiz["Postiz (candidate)<br/><i>candidate</i>"]:::candidate
+  ui --> auth
+  auth --> api
+  api --> ai
+  api --> queue
+  api --> router
+  api --> db
+  queue --> publishing
+  queue --> inbox
+  queue --> ads
+  queue --> analytics
+  ai -->|"drafts"| publishing
+  media --> publishing
+  router --> native
+  router -.->|"opt-in"| zernio
+  router -.->|"under evaluation"| postiz
+  publishing --> platforms
+  inbox --> platforms
+  ads --> platforms
+  native --> platforms
+  zernio -.-> platforms
+  platforms --> analytics
+  analytics --> db
+  analytics ==>|"evidence (planned)"| ai
+  classDef implemented fill:#12352b,stroke:#6fb89b,color:#ede8e2
+  classDef partial fill:#3a3115,stroke:#d9a441,color:#ede8e2
+  classDef planned fill:#272422,stroke:#918982,color:#b8b0a8,stroke-dasharray:5 4
+  classDef candidate fill:#272422,stroke:#8daad4,color:#b8b0a8,stroke-dasharray:5 4
+  classDef optional fill:#1f2a3a,stroke:#8daad4,color:#ede8e2,stroke-dasharray:2 3
+  classDef external fill:#1b1917,stroke:#4a4440,color:#ede8e2

@@ -18,6 +18,13 @@ process.env.META_APP_ID = "111222333444";
 process.env.META_APP_SECRET = "test-app-secret";
 process.env.PUBLIC_APP_URL = "http://localhost:3000";
 
+// Unique provider ids per run: rows left in a developer database can never collide with the test.
+const RUN = Date.now().toString(36);
+const IG = `IG${RUN}`;
+const PAGE = `PG${RUN}`;
+const MEDIA = `MEDIA${RUN}`;
+const FBPOST = `${PAGE}_POST9`;
+
 const { prisma } = await import("@sm/db");
 const core = await import("./index.js");
 
@@ -65,18 +72,18 @@ async function handler(req: IncomingMessage, res: ServerResponse) {
     }
     return send({ recipient_id: "RECIP_1", message_id: `m_${++fake.seq}` });
   }
-  if (seg[0] === "IG1" && seg[1] === "media") return send({ data: [{ id: "MEDIA_A", caption: "Divano Boston", permalink: "https://www.instagram.com/p/MEDIA_A/", timestamp: "2026-11-14T10:00:00+0000", media_type: "IMAGE" }] });
-  if (seg[0] === "MEDIA_A" && seg[1] === "comments") return send({ data: fake.igComments });
-  if (seg[0] === "PAGE1" && seg[1] === "posts") return send({ data: [{ id: "PAGE1_POST9", message: "Nuova collezione", permalink_url: "https://www.facebook.com/PAGE1_POST9", created_time: "2026-11-14T10:00:00+0000" }] });
+  if (seg[0] === IG && seg[1] === "media") return send({ data: [{ id: MEDIA, caption: "Divano Boston", permalink: `https://www.instagram.com/p/${MEDIA}/`, timestamp: "2026-11-14T10:00:00+0000", media_type: "IMAGE" }] });
+  if (seg[0] === MEDIA && seg[1] === "comments") return send({ data: fake.igComments });
+  if (seg[0] === PAGE && seg[1] === "posts") return send({ data: [{ id: FBPOST, message: "Nuova collezione", permalink_url: `https://www.facebook.com/${FBPOST}`, created_time: "2026-11-14T10:00:00+0000" }] });
   if (seg[1] === "subscribed_apps" && req.method === "POST") return send({ success: true });
   return send({ error: { message: `Unsupported (${req.method} ${path})`, code: 100 } }, 400);
 }
 
 const sign = (raw: string) => "sha256=" + createHmac("sha256", "test-app-secret").update(raw).digest("hex");
-const igWebhook = (commentId: string, text: string, from = { id: "USER_77", username: "cliente.curioso" }, mediaId = "MEDIA_A") =>
-  JSON.stringify({ object: "instagram", entry: [{ id: "IG1", time: Math.floor(Date.now() / 1000), changes: [{ field: "comments", value: { from, media: { id: mediaId, media_product_type: "FEED" }, id: commentId, text } }] }] });
+const igWebhook = (commentId: string, text: string, from = { id: "USER_77", username: "cliente.curioso" }, mediaId = MEDIA) =>
+  JSON.stringify({ object: "instagram", entry: [{ id: IG, time: Math.floor(Date.now() / 1000), changes: [{ field: "comments", value: { from, media: { id: mediaId, media_product_type: "FEED" }, id: commentId, text } }] }] });
 const fbWebhook = (commentId: string, message: string) =>
-  JSON.stringify({ object: "page", entry: [{ id: "PAGE1", time: Math.floor(Date.now() / 1000), changes: [{ field: "feed", value: { from: { id: "USER_88", name: "Maria Rossi" }, post_id: "PAGE1_POST9", comment_id: commentId, created_time: Math.floor(Date.now() / 1000), item: "comment", parent_id: "PAGE1_POST9", verb: "add", message } }] }] });
+  JSON.stringify({ object: "page", entry: [{ id: PAGE, time: Math.floor(Date.now() / 1000), changes: [{ field: "feed", value: { from: { id: "USER_88", name: "Maria Rossi" }, post_id: FBPOST, comment_id: commentId, created_time: Math.floor(Date.now() / 1000), item: "comment", parent_id: FBPOST, verb: "add", message } }] }] });
 
 const stamp = Date.now();
 const email = `pr-test-${stamp}@example.com`;
@@ -89,7 +96,8 @@ let fb: SocialAccount;
 async function drain() {
   for (let i = 0; i < 10; i++) if ((await core.processDueJobs("pr-test", 20)) === 0) break;
 }
-const row = (commentId: string) => prisma.privateReply.findFirst({ where: { externalCommentId: commentId } });
+// Scoped to this run's two accounts: a developer database may hold other rows with the same comment id.
+const row = (commentId: string) => prisma.privateReply.findFirst({ where: { externalCommentId: commentId, socialAccountId: { in: [ig.id, fb.id] } } });
 
 describe.skipIf(!dbOk)("Comment → DM via a stand-in Graph API", () => {
   beforeAll(async () => {
@@ -101,17 +109,17 @@ describe.skipIf(!dbOk)("Comment → DM via a stand-in Graph API", () => {
     process.env.INSTAGRAM_GRAPH_BASE = base;
     await prisma.job.updateMany({ where: { status: "queued" }, data: { status: "canceled", finishedAt: new Date() } });
     await prisma.job.deleteMany({ where: { type: { in: ["poll_private_reply_rules", "send_private_reply"] } } });
-    await prisma.webhookEvent.deleteMany({ where: { provider: "meta", OR: [{ providerEventId: { contains: ":IG1:" } }, { providerEventId: { contains: ":PAGE1:" } }] } });
+    await prisma.webhookEvent.deleteMany({ where: { provider: "meta", OR: [{ providerEventId: { contains: `:${IG}:` } }, { providerEventId: { contains: `:${PAGE}:` } }] } });
     user = await prisma.user.create({ data: { email, name: "PR", passwordHash: "x" } });
     brand = await prisma.brand.create({ data: { ownerId: user.id, name: "PR Brand", slug: `pr-brand-${stamp}` } });
-    ig = await prisma.socialAccount.create({ data: { brandId: brand.id, provider: "instagram", backend: "native", externalAccountId: "IG1", accountType: "professional", displayName: "spagnol.test", username: "spagnol.test", metadata: { pageId: "PAGE1", loginMethod: "facebook_login", grantedScopes: ["instagram_basic", "instagram_manage_comments"] } } });
-    await core.storeCredentials(ig.id, { pageAccessToken: "PAGE_TOKEN_1", pageId: "PAGE1" });
-    fb = await prisma.socialAccount.create({ data: { brandId: brand.id, provider: "facebook", backend: "native", externalAccountId: "PAGE1", accountType: "page", displayName: "Spagnol Test Page", metadata: { loginMethod: "facebook_login" } } });
+    ig = await prisma.socialAccount.create({ data: { brandId: brand.id, provider: "instagram", backend: "native", externalAccountId: IG, accountType: "professional", displayName: "spagnol.test", username: "spagnol.test", metadata: { pageId: PAGE, loginMethod: "facebook_login", grantedScopes: ["instagram_basic", "instagram_manage_comments"] } } });
+    await core.storeCredentials(ig.id, { pageAccessToken: "PAGE_TOKEN_1", pageId: PAGE });
+    fb = await prisma.socialAccount.create({ data: { brandId: brand.id, provider: "facebook", backend: "native", externalAccountId: PAGE, accountType: "page", displayName: "Spagnol Test Page", metadata: { loginMethod: "facebook_login" } } });
     await core.storeCredentials(fb.id, { pageAccessToken: "PAGE_TOKEN_1" });
   });
   afterAll(async () => {
     await prisma.user.deleteMany({ where: { email } });
-    await prisma.webhookEvent.deleteMany({ where: { provider: "meta", OR: [{ providerEventId: { contains: ":IG1:" } }, { providerEventId: { contains: ":PAGE1:" } }] } });
+    await prisma.webhookEvent.deleteMany({ where: { provider: "meta", OR: [{ providerEventId: { contains: `:${IG}:` } }, { providerEventId: { contains: `:${PAGE}:` } }] } });
     await new Promise<void>((r) => server.close(() => r()));
     await prisma.$disconnect();
   });
@@ -119,8 +127,8 @@ describe.skipIf(!dbOk)("Comment → DM via a stand-in Graph API", () => {
   it("lists the account's posts for the picker and saves the rule", async () => {
     const adapter = core.adapterFor(ig);
     const posts = await adapter.listRecentPosts!(await core.buildAccountContext(ig));
-    expect(posts.map((p) => p.externalPostId)).toEqual(["MEDIA_A"]);
-    const rule = await core.createPrivateReplyRule(user.id, brand.id, { socialAccountId: ig.id, externalPostId: "MEDIA_A", postLabel: posts[0]!.label, postUrl: posts[0]!.url, keyword: "CATALOGO", replyText: "Ecco il catalogo: https://spagnolmobili.it/catalogo", enabled: true });
+    expect(posts.map((p) => p.externalPostId)).toEqual([MEDIA]);
+    const rule = await core.createPrivateReplyRule(user.id, brand.id, { socialAccountId: ig.id, externalPostId: MEDIA, postLabel: posts[0]!.label, postUrl: posts[0]!.url, keyword: "CATALOGO", replyText: "Ecco il catalogo: https://spagnolmobili.it/catalogo", enabled: true });
     expect(rule.keyword).toBe("CATALOGO");
     expect(rule.enabled).toBe(true);
     expect(await prisma.job.count({ where: { type: "poll_private_reply_rules", status: "queued" } })).toBe(1);
@@ -157,14 +165,14 @@ describe.skipIf(!dbOk)("Comment → DM via a stand-in Graph API", () => {
     expect(r?.source).toBe("webhook");
     const sent = messageCalls();
     expect(sent.length).toBe(1);
-    expect(sent[0]!.path).toBe("/IG1/messages"); // Instagram via Facebook Login: graph.facebook.com/{ig-user-id}/messages
+    expect(sent[0]!.path).toBe(`/${IG}/messages`); // Instagram via Facebook Login: graph.facebook.com/{ig-user-id}/messages
     expect(sent[0]!.auth).toBe("Bearer PAGE_TOKEN_1");
     expect(JSON.parse(sent[0]!.body)).toEqual({ recipient: { comment_id: "C_1" }, message: { text: "Ecco il catalogo: https://spagnolmobili.it/catalogo" } });
     // Activity shows the outcome.
-    const log = await prisma.auditLog.findFirst({ where: { action: "automation.private_reply.sent", targetId: "C_1" } });
+    const log = await prisma.auditLog.findFirst({ where: { action: "automation.private_reply.sent", targetId: "C_1", brandId: brand.id } });
     expect(log?.outcome).toBe("ok");
     // The comment is also in the inbox, marked replied.
-    expect((await prisma.comment.findFirst({ where: { externalCommentId: "C_1" } }))?.repliedAt).toBeTruthy();
+    expect((await prisma.comment.findFirst({ where: { externalCommentId: "C_1", socialAccountId: ig.id } }))?.repliedAt).toBeTruthy();
   });
 
   it("gives an unrelated comment no DM, visibly", async () => {
@@ -176,7 +184,7 @@ describe.skipIf(!dbOk)("Comment → DM via a stand-in Graph API", () => {
   });
 
   it("ignores the account's own comments and comments on other posts", async () => {
-    const own = igWebhook("C_3", "CATALOGO", { id: "IG1", username: "spagnol.test" });
+    const own = igWebhook("C_3", "CATALOGO", { id: IG, username: "spagnol.test" });
     await core.ingestMetaWebhook({ rawBody: own, signature: sign(own) });
     const other = igWebhook("C_4", "CATALOGO", undefined, "MEDIA_Z");
     await core.ingestMetaWebhook({ rawBody: other, signature: sign(other) });
@@ -201,6 +209,27 @@ describe.skipIf(!dbOk)("Comment → DM via a stand-in Graph API", () => {
     expect(messageCalls().length).toBe(2);
   });
 
+  it("an account whose saved sign-in cannot be read fails cleanly and does not block other accounts", async () => {
+    const broken = await prisma.socialAccount.create({ data: { brandId: brand.id, provider: "instagram", backend: "native", externalAccountId: `${IG}X`, accountType: "professional", displayName: "broken.token", metadata: { loginMethod: "facebook_login" } } });
+    await core.storeCredentials(broken.id, { pageAccessToken: "PAGE_TOKEN_X", pageId: PAGE });
+    await prisma.socialAccountToken.updateMany({ where: { socialAccountId: broken.id }, data: { ciphertext: "AAAA" } });
+    const brokenRule = await core.createPrivateReplyRule(user.id, brand.id, { socialAccountId: broken.id, externalPostId: `${MEDIA}X`, keyword: "catalogo", replyText: "x", enabled: true });
+    const before = messageCalls().length;
+    const pr = await prisma.privateReply.create({ data: { brandId: brand.id, socialAccountId: broken.id, provider: "instagram", externalPostId: `${MEDIA}X`, externalCommentId: "C_broken", commentText: "catalogo", source: "webhook", keyword: "catalogo", replyText: "x", status: "queued" } });
+    await expect(core.sendPrivateReplyJob(pr.id, 1)).rejects.toThrow();
+    const after = await prisma.privateReply.findUnique({ where: { id: pr.id } });
+    expect(after?.status).toBe("failed");
+    expect(after?.errorCategory).toBe("auth_expired");
+    expect(messageCalls().length).toBe(before); // nothing left the app
+    // the poll still serves the healthy account
+    fake.igComments = [{ id: "C_after_broken", text: "CATALOGO", timestamp: new Date().toISOString(), from: { id: "USER_90", username: "dopo" } }];
+    await core.pollPrivateReplyRulesJob();
+    await drain();
+    expect((await row("C_after_broken"))?.status).toBe("sent");
+    await core.deletePrivateReplyRule(user.id, brokenRule.id);
+    await prisma.socialAccount.delete({ where: { id: broken.id } });
+  });
+
   it("records a permission error instead of pretending", async () => {
     fake.messagesMode = "permission";
     const raw = igWebhook("C_6", "CATALOGO");
@@ -210,7 +239,7 @@ describe.skipIf(!dbOk)("Comment → DM via a stand-in Graph API", () => {
     expect(r?.status).toBe("failed");
     expect(r?.errorCategory).toBe("permission");
     expect(r?.error).toContain("(#10)");
-    const log = await prisma.auditLog.findFirst({ where: { action: "automation.private_reply.failed", targetId: "C_6" } });
+    const log = await prisma.auditLog.findFirst({ where: { action: "automation.private_reply.failed", targetId: "C_6", brandId: brand.id } });
     expect(log?.outcome).toBe("error");
     expect(await prisma.notification.count({ where: { brandId: brand.id, level: "error" } })).toBeGreaterThan(0);
     fake.messagesMode = "ok";
@@ -265,28 +294,28 @@ describe.skipIf(!dbOk)("Comment → DM via a stand-in Graph API", () => {
   });
 
   it("Facebook Page comment → Messenger private reply through the Page", async () => {
-    await core.createPrivateReplyRule(user.id, brand.id, { socialAccountId: fb.id, externalPostId: "PAGE1_POST9", postLabel: "Nuova collezione", postUrl: null, keyword: "catalogo", replyText: "Ciao Maria, ecco il catalogo.", enabled: true });
-    const raw = fbWebhook("PAGE1_POST9_C1", "Vorrei il CATALOGO grazie");
+    await core.createPrivateReplyRule(user.id, brand.id, { socialAccountId: fb.id, externalPostId: FBPOST, postLabel: "Nuova collezione", postUrl: null, keyword: "catalogo", replyText: "Ciao Maria, ecco il catalogo.", enabled: true });
+    const raw = fbWebhook(`${FBPOST}_C1`, "Vorrei il CATALOGO grazie");
     await core.ingestMetaWebhook({ rawBody: raw, signature: sign(raw) });
     await core.ingestMetaWebhook({ rawBody: raw, signature: sign(raw) });
     await drain();
-    const r = await row("PAGE1_POST9_C1");
+    const r = await row(`${FBPOST}_C1`);
     expect(r?.status).toBe("sent");
     expect(r?.provider).toBe("facebook");
-    const calls = messageCalls().filter((c) => c.body.includes("PAGE1_POST9_C1"));
+    const calls = messageCalls().filter((c) => c.body.includes(`${FBPOST}_C1`));
     expect(calls.length).toBe(1);
-    expect(calls[0]!.path).toBe("/PAGE1/messages");
-    const unrelated = fbWebhook("PAGE1_POST9_C2", "Che bello");
+    expect(calls[0]!.path).toBe(`/${PAGE}/messages`);
+    const unrelated = fbWebhook(`${FBPOST}_C2`, "Che bello");
     await core.ingestMetaWebhook({ rawBody: unrelated, signature: sign(unrelated) });
     await drain();
-    expect((await row("PAGE1_POST9_C2"))?.status).toBe("skipped");
+    expect((await row(`${FBPOST}_C2`))?.status).toBe("skipped");
   });
 
   it("subscribes the account to the webhook fields at Meta", async () => {
     const r = await core.subscribeAccountWebhooks(user.id, ig.id);
     expect(r.subscribedFields).toEqual(["feed"]); // Facebook Login path: the linked Page is subscribed
     const sub = fake.calls.find((c) => c.path.endsWith("/subscribed_apps"));
-    expect(sub?.path).toBe("/PAGE1/subscribed_apps");
+    expect(sub?.path).toBe(`/${PAGE}/subscribed_apps`);
     const acc = await prisma.socialAccount.findUniqueOrThrow({ where: { id: ig.id } });
     expect((acc.metadata as { webhookFields?: string[] }).webhookFields).toEqual(["feed"]);
   });

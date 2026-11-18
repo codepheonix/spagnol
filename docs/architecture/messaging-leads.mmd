@@ -1,0 +1,36 @@
+%% GENERATED from packages/core/src/architecture/diagrams.ts — run `pnpm diagrams`; do not edit by hand.
+%% Comments, DMs and leads: A comment from arrival to one private reply and a lead, with the blocked and human-review branches. Open a real comment to see its path.
+flowchart TD
+  event(["Customer comments or sends a DM"]):::external
+  webhook["Official webhook receives the event"]:::implemented
+  poll["Per-minute poll of watched posts"]:::implemented
+  identify["Identify company and post"]:::implemented
+  rules["Match rules and keywords"]:::implemented
+  intent["OpenRouter: understand intent<br/><i>planned</i>"]:::planned
+  allowed{"Message allowed by platform?"}:::implemented
+  send["Send approved reply"]:::implemented
+  blocked["Do not send"]:::implemented
+  review["Human review (failed / uncertain)"]:::implemented
+  lead["Create or update CRM lead<br/><i>partial</i>"]:::partial
+  assign["Assign salesperson or dealer<br/><i>planned</i>"]:::planned
+  outcome["Track lead outcome<br/><i>planned</i>"]:::planned
+  event --> webhook
+  event -->|"until webhooks are approved"| poll
+  webhook --> identify
+  poll --> identify
+  identify --> rules
+  rules --> allowed
+  rules -.->|"no keyword (planned)"| intent
+  allowed -->|"yes"| send
+  allowed -.->|"no"| blocked
+  send -->|"sent"| lead
+  send -.->|"refused / uncertain"| review
+  review ==>|"manual retry"| send
+  lead --> assign
+  assign --> outcome
+  classDef implemented fill:#12352b,stroke:#6fb89b,color:#ede8e2
+  classDef partial fill:#3a3115,stroke:#d9a441,color:#ede8e2
+  classDef planned fill:#272422,stroke:#918982,color:#b8b0a8,stroke-dasharray:5 4
+  classDef candidate fill:#272422,stroke:#8daad4,color:#b8b0a8,stroke-dasharray:5 4
+  classDef optional fill:#1f2a3a,stroke:#8daad4,color:#ede8e2,stroke-dasharray:2 3
+  classDef external fill:#1b1917,stroke:#4a4440,color:#ede8e2

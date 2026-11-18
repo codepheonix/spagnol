@@ -22,7 +22,8 @@
     "smoke": "tsx scripts/smoke.ts",
     "backup": "bash scripts/backup.sh",
     "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "diagrams": "tsx scripts/generate-diagrams.ts"
   },
   "devDependencies": {
     "tsx": "^4.19.2",

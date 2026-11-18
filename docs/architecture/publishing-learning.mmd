@@ -1,0 +1,42 @@
+%% GENERATED from packages/core/src/architecture/diagrams.ts — run `pnpm diagrams`; do not edit by hand.
+%% Publishing and learning: One post from trigger to verified publication and metrics, with the retry and partial-publication branches. Open a real post to see its path.
+flowchart TD
+  trigger["Scheduled or manual trigger"]:::implemented
+  knowledge["Load brand knowledge<br/><i>planned</i>"]:::planned
+  history["Read historical analytics<br/><i>partial</i>"]:::partial
+  ai["OpenRouter: plan and create content<br/><i>partial</i>"]:::partial
+  creative["Creative engine: image or video<br/><i>partial</i>"]:::partial
+  validate["Validate brand and platform rules"]:::implemented
+  policy{"Within approved automation policy?<br/><i>partial</i>"}:::partial
+  approval["Request human approval<br/><i>partial</i>"]:::partial
+  pqueue["Publishing queue"]:::implemented
+  publish["Publish to authorized channels"]:::implemented
+  verify["Verify each platform result"]:::implemented
+  retry["Record failure and retry safely"]:::implemented
+  partial["Partial publication"]:::implemented
+  collect["Collect actual performance<br/><i>partial</i>"]:::partial
+  learn["Compare, experiment, improve memory<br/><i>planned</i>"]:::planned
+  trigger --> knowledge
+  trigger --> history
+  knowledge --> ai
+  history --> ai
+  ai --> creative
+  creative --> validate
+  validate --> policy
+  policy -->|"yes"| pqueue
+  policy -->|"no"| approval
+  approval --> pqueue
+  pqueue --> publish
+  publish --> verify
+  verify -->|"success"| collect
+  verify -.->|"failure"| retry
+  retry ==>|"after lookup"| pqueue
+  verify -.->|"some failed"| partial
+  collect --> learn
+  learn ==>|"next plan"| history
+  classDef implemented fill:#12352b,stroke:#6fb89b,color:#ede8e2
+  classDef partial fill:#3a3115,stroke:#d9a441,color:#ede8e2
+  classDef planned fill:#272422,stroke:#918982,color:#b8b0a8,stroke-dasharray:5 4
+  classDef candidate fill:#272422,stroke:#8daad4,color:#b8b0a8,stroke-dasharray:5 4
+  classDef optional fill:#1f2a3a,stroke:#8daad4,color:#ede8e2,stroke-dasharray:2 3
+  classDef external fill:#1b1917,stroke:#4a4440,color:#ede8e2

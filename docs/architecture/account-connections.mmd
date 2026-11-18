@@ -1,0 +1,41 @@
+%% GENERATED from packages/core/src/architecture/diagrams.ts — run `pnpm diagrams`; do not edit by hand.
+%% Account connection: From choosing a brand to a saved, capability-checked connection, with the failure and reconnection branches.
+flowchart TD
+  brand["Select company (brand)"]:::implemented
+  platform["Click Facebook or Instagram"]:::implemented
+  provider{"Connection provider?"}:::implemented
+  appcheck{"Meta app configured?"}:::implemented
+  setup["Meta setup page"]:::implemented
+  oauth["Official Meta sign-in"]:::external
+  zoauth["Zernio hosted sign-in<br/><i>optional</i>"]:::optional
+  callback["Callback: state + code exchange"]:::implemented
+  choose["Choose Pages / Instagram accounts"]:::implemented
+  perms{"Required permissions granted?"}:::implemented
+  save["Save connection (encrypted)"]:::implemented
+  caps["Capability check + health"]:::implemented
+  error["Show connection or approval error"]:::implemented
+  reconnect["Reconnect (token expired / revoked)"]:::implemented
+  brand --> platform
+  platform --> provider
+  provider -->|"direct (default)"| appcheck
+  provider -.->|"Zernio (opt-in)"| zoauth
+  appcheck -.->|"no"| setup
+  setup ==>|"saved"| appcheck
+  appcheck -->|"yes"| oauth
+  oauth --> callback
+  zoauth -.-> callback
+  callback --> choose
+  choose --> perms
+  perms -->|"yes"| save
+  perms -.->|"no"| error
+  oauth -.->|"declined / invalid scopes"| error
+  save --> caps
+  caps -.->|"needs_reconnect"| reconnect
+  reconnect ==> oauth
+  error ==> reconnect
+  classDef implemented fill:#12352b,stroke:#6fb89b,color:#ede8e2
+  classDef partial fill:#3a3115,stroke:#d9a441,color:#ede8e2
+  classDef planned fill:#272422,stroke:#918982,color:#b8b0a8,stroke-dasharray:5 4
+  classDef candidate fill:#272422,stroke:#8daad4,color:#b8b0a8,stroke-dasharray:5 4
+  classDef optional fill:#1f2a3a,stroke:#8daad4,color:#ede8e2,stroke-dasharray:2 3
+  classDef external fill:#1b1917,stroke:#4a4440,color:#ede8e2

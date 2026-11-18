@@ -38,3 +38,29 @@ Uses your Zernio API key (stored encrypted from Settings). Connect = Zernio-host
 | WhatsApp | messaging only | DMs, templates | — | CTWA ads | optional; the company does not use WhatsApp |
 
 Zernio pricing (Build plan): 2 accounts free; 3–10 accounts $6/mo each; ads $0.01 per active ad/month after 500 free; messaging first 10,000 sent/month free.
+
+## Internal provider interface (what the unified platform calls)
+
+The master prompt's conceptual operations map to the adapter contract in
+`packages/integrations/src/contract.ts`. A method exists on an adapter only where the provider
+really supports it; everything else reports a capability state instead of pretending.
+
+| Conceptual operation | Contract method | Meta native | Zernio (optional) | Notes |
+|---|---|---|---|---|
+| connectAccount | `buildAuthorizationUrl` + `exchangeAuthorizationCode` / `connectWithCredentials` | ✅ | ✅ | owner picks assets per brand |
+| disconnectAccount | `revoke` + `disconnectAccount` (core) | ✅ | ✅ | |
+| getConnectionStatus | `verifyConnection` | ✅ | ✅ | re-checked every 6 h |
+| listCapabilities | `discoverCapabilities` | ✅ | ✅ | from granted scopes |
+| publishPost / schedulePost | `validatePost` + `publish` (scheduling = this app's queue) | ✅ | ✅ | one execution provider per account |
+| getPublicationStatus | `getPublishStatus` / `findRecentPost` | ✅ | ✅ | check-before-resend |
+| getAnalytics | `fetchMetrics` | ✅ (optional scopes) | ✅ | absent metric = empty |
+| receiveWebhook | `/api/webhooks/meta`, `/api/webhooks/zernio` | ✅ comments, feed | ✅ | signature verified |
+| listConversations | `fetchInbox` / `fetchComments` | comments ✅ · DMs need approval | ✅ | |
+| sendAuthorizedReply | `replyComment` / `sendPrivateReply` / `sendMessage` | ✅ private reply, comment reply | ✅ | one private reply per comment |
+| getAdvertisingAccounts | `syncAdAccounts` (core) | ❌ not built | ✅ read | native Marketing adapter planned |
+| createCampaign | — | ❌ | ❌ disabled | drafts + confirmation exist; write path off |
+| getCampaignStatus | `syncAdAccounts` | ❌ | ✅ read | |
+
+Networks with no adapter in this repository: TikTok, LinkedIn, YouTube, X, Threads, Pinterest.
+Candidates for them are listed in `docs/audit/phase-0-audit.md` (Social SDK direct adapters in
+process, or Postiz as a separate optional provider).
