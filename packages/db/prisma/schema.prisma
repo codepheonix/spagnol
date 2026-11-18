@@ -51,6 +51,15 @@ model Brand {
   name        String
   slug        String
   websiteUrl  String?
+  // Workspace profile. `kind`: personal (someone's own accounts) | business (the owner's company)
+  // | client (a company managed on behalf of a customer — the agency case).
+  kind           String  @default("business")
+  industry       String?
+  country        String?
+  description    String?
+  brandVoice     String?
+  targetAudience String?
+  logoUrl        String?
   timezone    String    @default("Europe/Rome")
   locale      String    @default("it")
   color       String?

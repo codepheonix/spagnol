@@ -7,5 +7,5 @@ export const logger = pino({
     paths: ["*.botToken", "*.accessToken", "*.refreshToken", "*.appPassword", "*.apiKey", "*.pageAccessToken", "*.userAccessToken", "*.password", "*.authorization", "headers.authorization", "credentials", "*.credentials"],
     censor: "[redacted]",
   },
-  base: { service: process.env.SERVICE_NAME ?? "social-manager" },
+  base: { service: process.env.SERVICE_NAME ?? "igerald" },
 });

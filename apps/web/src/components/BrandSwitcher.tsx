@@ -2,13 +2,22 @@
 import { useRouter } from "next/navigation";
 import { api } from "./api";
 
-export function BrandSwitcher({ brands, activeId }: { brands: Array<{ id: string; name: string }>; activeId: string | null }) {
+const GROUPS: Array<[string, string]> = [["personal", "Personal"], ["business", "Companies"], ["client", "Client companies"]];
+
+/** Switches the workspace everything else on screen belongs to. */
+export function BrandSwitcher({ brands, activeId }: { brands: Array<{ id: string; name: string; kind?: string }>; activeId: string | null }) {
   const router = useRouter();
+  if (brands.length === 0) return <a className="chip" href="/organizations?first=1">Create a workspace</a>;
   return (
-    <select value={activeId ?? ""} onChange={async (e) => { await api(`/api/brands/${e.target.value}/select`, { method: "POST" }); router.refresh(); }}>
-      {brands.map((b) => (
-        <option key={b.id} value={b.id}>{b.name}</option>
-      ))}
+    <select aria-label="Current workspace" value={activeId ?? ""} onChange={async (e) => { await api(`/api/brands/${e.target.value}/select`, { method: "POST" }); router.refresh(); }}>
+      {GROUPS.map(([kind, label]) => {
+        const items = brands.filter((b) => (b.kind ?? "business") === kind);
+        return items.length ? (
+          <optgroup key={kind} label={label}>
+            {items.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+          </optgroup>
+        ) : null;
+      })}
     </select>
   );
 }

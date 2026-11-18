@@ -30,10 +30,8 @@ async function main() {
         locale: process.env.DEFAULT_LOCALE ?? "it",
       },
     });
-    await prisma.brand.create({
-      data: { ownerId: user.id, name: "Default brand", slug: "default", timezone: user.timezone, locale: user.locale },
-    });
-    console.log(`Owner created: ${email} (with a default brand).`);
+    // No workspace is seeded: a new installation starts neutral and the owner adds their own.
+    console.log(`Owner created: ${email} (no workspace yet — create one after signing in).`);
   } else if (process.env.OWNER_RESET_PASSWORD === "1") {
     await prisma.user.update({ where: { email }, data: { passwordHash: await hashPassword(password) } });
     await prisma.session.deleteMany({ where: { userId: existing.id } });

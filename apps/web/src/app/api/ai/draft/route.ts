@@ -9,7 +9,7 @@ export const POST = handle(async (req) => {
   const user = await apiUser();
   const input = await parseJson(req, schema);
   const brand = await apiBrand(user, input.brandId);
-  const r = await generateDraft({ brandName: brand.name, brief: input.brief, platform: input.platform, language: input.language, tone: input.tone, hashtags: input.hashtags, maxLength: input.maxLength });
+  const r = await generateDraft({ brandName: brand.name, industry: brand.industry, description: brand.description, brandVoice: brand.brandVoice, targetAudience: brand.targetAudience, brief: input.brief, platform: input.platform, language: input.language, tone: input.tone, hashtags: input.hashtags, maxLength: input.maxLength });
   await audit({ actorUserId: user.id, brandId: brand.id, action: "ai.draft", details: { model: r.model, platform: input.platform } });
   return json(r);
 });

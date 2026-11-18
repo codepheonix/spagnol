@@ -1,7 +1,16 @@
-# Social Manager — persistent project rules
+# iGerald — persistent project rules
 
-Personal-use social media manager for the Spagnol Mobili group (one owner, several brands).
-Reproduces Zernio's *functional categories* with lawful official APIs. Not a clone of its UI or server.
+iGerald is an independent social media management and advertising product: one person, a company, or
+an agency with many client companies. It is not branded for, or tied to, any customer. Customer names
+must never appear in code, defaults, seed data, prompts or the default screens.
+It uses each platform's official API. Not a clone of any other product's UI or server.
+
+## Workspaces (tenancy)
+- A workspace is a `Brand` row (`kind`: `personal` | `business` | `client`). The model keeps its name; the UI says "workspace" / "company".
+- Services live in `packages/core/src/workspaces.ts` (`createWorkspace`, `listWorkspaces`, `listAllAccounts`). Cross-workspace screens (Overview, All accounts, Organizations) must go through them — they start from the owner and never return another owner's rows.
+- A new installation has no workspace. Nothing is preselected, seeded or named for the user.
+- Archiving (`archivedAt`) hides a workspace everywhere and deletes nothing; restoring is an explicit action on Organizations. Legacy customer workspaces stay archived until their owner restores them.
+- Not built yet: organizations with several users, invitations, roles, approvals.
 
 ## Architecture (do not drift)
 - pnpm monorepo. `apps/web` = Next.js 15 App Router (UI + `/api/*` routes). `apps/worker` = always-on job runner.
@@ -29,8 +38,12 @@ Reproduces Zernio's *functional categories* with lawful official APIs. Not a clo
 - Ads: read-only by default; activation needs a fresh confirmation token minted by a user action; the write path stays disabled until read sync is LIVE_VERIFIED.
 - Implementation status per provider lives in `docs/integrations/provider-capabilities.md`. `LIVE_VERIFIED` only with evidence in `docs/test-evidence/`.
 
-## No-design-loop rule
-UI is deliberately minimal (plain CSS). Do not spend time on visual polish unless usability is blocked. Once a feature passes its objective test, move on.
+## Design system
+- Tokens and components are in `apps/web/src/app/globals.css` (plain CSS, no utility framework): titanium + smoked glass, one ultraviolet signal colour, Bricolage Grotesque for display and Hanken Grotesk for UI (self-hosted via `@fontsource-variable`). Dark is the default; light is supported.
+- Platform logos: Font Awesome brand glyphs through `lib/platforms.ts` and `PlatformMedal`. Never redraw, recolour inside, stretch or extrude a platform's mark — the 3D treatment belongs to the card and the disc around it. Add a platform by adding one entry to `PLATFORMS`.
+- `built: false` platforms show "Not available yet" and no Connect button. Never ship a button that does nothing.
+- Real 3D (three.js / React Three Fiber) is used once, for the Overview scene: lazy-loaded, capped pixel ratio, static under reduced motion, with a flat fallback and text links for the same destinations. Everything else is CSS 3D. Do not put WebGL on a page where it could delay a task.
+- Every number on screen is read from records. Unknown is "—" or "Not checked yet", never 0 or an estimate.
 
 ## Commands
 `pnpm infra:up` (Postgres + MinIO via Docker) · `pnpm db:migrate:dev` · `pnpm db:seed` · `pnpm dev` · `pnpm dev:worker` · `pnpm test` · `pnpm typecheck` · `pnpm smoke` (needs a running web with `TELEGRAM_API_BASE=http://127.0.0.1:8089`) · `pnpm backup`.

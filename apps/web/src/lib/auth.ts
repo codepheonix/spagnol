@@ -63,7 +63,7 @@ export async function getActiveBrand(user: User): Promise<Brand | null> {
 
 export async function requireBrand(user: User): Promise<Brand> {
   const brand = await getActiveBrand(user);
-  if (!brand) redirect("/brands?first=1");
+  if (!brand) redirect("/organizations?first=1");
   return brand;
 }
 

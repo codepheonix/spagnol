@@ -156,7 +156,7 @@ export function PrivateReplyRules({ brandId, brandName }: { brandId: string; bra
           </div>
         </div>
         <label>Private reply (sent once to the commenter)</label>
-        <textarea rows={4} value={reply} onChange={(e) => setReply(e.target.value)} placeholder={"Ciao! Ecco il catalogo: https://www.spagnolmobili.it/catalogo — scrivici qui per misure e rivenditore più vicino."} />
+        <textarea rows={4} value={reply} onChange={(e) => setReply(e.target.value)} placeholder={"Hi! Here is the link you asked for: https://example.com/catalog — reply here if you have any question."} />
         {err && <div className="msg err">{err}</div>}
         {msg && <div className="msg ok">{msg}</div>}
         <div style={{ marginTop: 10 }}>

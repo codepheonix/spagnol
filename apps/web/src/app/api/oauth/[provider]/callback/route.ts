@@ -13,9 +13,9 @@ export async function GET(req: Request, { params }: { params: Promise<{ provider
   try {
     const r = await completeOAuthCallback(parseProvider(provider), qp);
     if (r.pendingState) return NextResponse.redirect(`${appUrl()}/accounts/choose?state=${encodeURIComponent(r.pendingState)}`);
-    return NextResponse.redirect(`${appUrl()}/accounts?${r.reconnected ? "reconnected" : "connected"}=${r.accounts.length}&provider=${provider}`);
+    return NextResponse.redirect(`${appUrl()}/connections?${r.reconnected ? "reconnected" : "connected"}=${r.accounts.length}&provider=${provider}`);
   } catch (err) {
     const msg = encodeURIComponent((err as Error).message.slice(0, 400));
-    return NextResponse.redirect(`${appUrl()}/accounts?error=${msg}&provider=${provider}`);
+    return NextResponse.redirect(`${appUrl()}/connections?error=${msg}&provider=${provider}`);
   }
 }

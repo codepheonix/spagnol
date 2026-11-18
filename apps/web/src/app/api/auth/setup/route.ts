@@ -5,7 +5,7 @@ import { audit } from "@sm/core";
 import { handle, json, parseJson, HttpError } from "@/lib/api";
 import { setupState } from "@/lib/setup";
 
-const schema = z.object({ email: z.string().email(), password: z.string().min(10).max(200), name: z.string().max(80).optional(), brandName: z.string().min(1).max(80).default("Default brand"), setupToken: z.string().optional() });
+const schema = z.object({ email: z.string().email(), password: z.string().min(10).max(200), name: z.string().max(80).optional(), setupToken: z.string().optional() });
 
 /** First-run owner creation, or claiming a pre-created owner that has no password yet. Optionally gated by SETUP_TOKEN. */
 export const POST = handle(async (req) => {
@@ -20,7 +20,7 @@ export const POST = handle(async (req) => {
     return json({ ok: true });
   }
   const user = await prisma.user.create({ data: { email: input.email.toLowerCase(), name: input.name, passwordHash: await hashPassword(input.password), timezone: process.env.DEFAULT_TIMEZONE ?? "Europe/Rome", locale: process.env.DEFAULT_LOCALE ?? "it" } });
-  await prisma.brand.create({ data: { ownerId: user.id, name: input.brandName, slug: input.brandName.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)/g, "") || "brand", timezone: user.timezone, locale: user.locale } });
+  // No workspace is created here: a new installation starts neutral and the owner chooses what to add.
   await audit({ actorUserId: user.id, action: "auth.setup" });
   return json({ ok: true });
 });

@@ -30,4 +30,4 @@ export function ThemeToggle({ labels }: { labels: { dark: string; light: string 
 }
 
 /** Inline script that applies the saved theme before first paint (no flash). */
-export const themeInitScript = `(function(){try{var t=localStorage.getItem("sm_theme");if(t==="light"||t==="dark"){document.documentElement.setAttribute("data-theme",t)}}catch(e){}})();`;
+export const themeInitScript = `(function(){try{var d=document.documentElement,t=localStorage.getItem("sm_theme");if(t==="light"||t==="dark"){d.setAttribute("data-theme",t)}if(localStorage.getItem("ig_nav")==="closed"&&window.innerWidth>900){d.setAttribute("data-nav","closed")}}catch(e){}})();`;

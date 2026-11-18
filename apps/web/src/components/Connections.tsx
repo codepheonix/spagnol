@@ -41,8 +41,8 @@ export function ConnectButton({ brandId, provider, backend = "native", loginMeth
 }
 
 /** Networks whose documented connection is a bot token / app password: a small inline form. */
-export function CredentialsConnect({ brandId, provider, fields, notes }: { brandId: string; provider: string; fields: Field[]; notes?: string }) {
-  const [open, setOpen] = useState(false);
+export function CredentialsConnect({ brandId, provider, fields, notes, startOpen }: { brandId: string; provider: string; fields: Field[]; notes?: string; startOpen?: boolean }) {
+  const [open, setOpen] = useState(Boolean(startOpen));
   const [values, setValues] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
@@ -129,7 +129,7 @@ export function AccountChooser({ state, brandName, options, providerNames }: { s
             setErr(null);
             try {
               const r = await api<{ accounts: unknown[] }>("/api/connections/pending", { method: "POST", json: { state, keys: picked } });
-              router.push(`/accounts?connected=${r.accounts.length}`);
+              router.push(`/connections?connected=${r.accounts.length}`);
               router.refresh();
             } catch (e) {
               setErr((e as Error).message);
@@ -144,7 +144,7 @@ export function AccountChooser({ state, brandName, options, providerNames }: { s
           disabled={busy}
           onClick={async () => {
             await api(`/api/connections/pending?state=${encodeURIComponent(state)}`, { method: "DELETE" }).catch(() => null);
-            router.push("/accounts");
+            router.push("/connections");
           }}
         >
           Cancel — connect nothing

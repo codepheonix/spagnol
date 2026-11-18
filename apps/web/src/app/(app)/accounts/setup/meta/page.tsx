@@ -27,7 +27,7 @@ export default async function MetaSetupPage() {
         <h3 style={{ marginTop: 0 }}>1 · Create the app at Meta</h3>
         <ol>
           <li>Open <a href="https://developers.facebook.com/apps/creation/" target="_blank" rel="noreferrer">developers.facebook.com/apps/creation</a>, signed in with the Facebook profile that manages the brand Pages. (First time: accept the developer terms.)</li>
-          <li><b>App details</b>: name it e.g. “Spagnol Social Manager”, add your email → <b>Next</b>.</li>
+          <li><b>App details</b>: name it after your own product or company (the name people see on Meta’s permission screen), add your email → <b>Next</b>.</li>
           <li><b>Use cases</b>: tick <b>Manage everything on your Page</b> and <b>Manage messaging and content on Instagram</b> → <b>Next</b>.</li>
           <li><b>Business</b>: pick the group&apos;s business portfolio (or “I don&apos;t want to connect a business portfolio yet”) → <b>Next</b> → <b>Next</b> → <b>Go to dashboard</b>.</li>
         </ol>

@@ -41,7 +41,7 @@ export function LoginForm({ labels }: { labels: { email: string; password: strin
 }
 
 export function SetupForm({ claimEmail, lang }: { claimEmail?: string | null; lang: "it" | "en" }) {
-  const [f, setF] = useState({ email: claimEmail ?? "", password: "", confirm: "", name: "", brandName: "Spagnol Mobili", setupToken: "" });
+  const [f, setF] = useState({ email: claimEmail ?? "", password: "", confirm: "", name: "", setupToken: "" });
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const router = useRouter();
@@ -59,7 +59,7 @@ export function SetupForm({ claimEmail, lang }: { claimEmail?: string | null; la
         }
         setBusy(true);
         try {
-          await api("/api/auth/setup", { method: "POST", json: { email: f.email, password: f.password, name: f.name, brandName: f.brandName, setupToken: f.setupToken || undefined } });
+          await api("/api/auth/setup", { method: "POST", json: { email: f.email, password: f.password, name: f.name, setupToken: f.setupToken || undefined } });
           router.push("/login");
         } catch (e2) {
           setErr((e2 as Error).message);
@@ -78,12 +78,6 @@ export function SetupForm({ claimEmail, lang }: { claimEmail?: string | null; la
       <input id="s-pw" type="password" value={f.password} onChange={set("password")} minLength={10} autoComplete="new-password" required />
       <label htmlFor="s-pw2">{it ? "Ripeti la password" : "Repeat the password"}</label>
       <input id="s-pw2" type="password" value={f.confirm} onChange={set("confirm")} minLength={10} autoComplete="new-password" required />
-      {!claimEmail && (
-        <>
-          <label htmlFor="s-brand">{it ? "Primo brand" : "First brand"}</label>
-          <input id="s-brand" type="text" value={f.brandName} onChange={set("brandName")} required />
-        </>
-      )}
       {err && <div className="msg err">{err}</div>}
       <button className="primary" disabled={busy} type="submit">{claimEmail ? (it ? "Salva la password" : "Save password") : it ? "Crea account" : "Create owner"}</button>
     </form>
