@@ -76,7 +76,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
         <div className="empty" style={{ marginBottom: 18 }}>
           <h3>Start with one workspace</h3>
           <p>Nothing is set up yet. Create a personal workspace for your own accounts, or add a company. You can add as many as you manage.</p>
-          {archived.length > 0 && <p className="small muted">You also have {archived.length} archived workspace{archived.length === 1 ? "" : "s"} from before, listed at the bottom. They stay hidden unless you restore them.</p>}
+          {archived.length > 0 && <p className="small muted">You also have {archived.length} archived workspace{archived.length === 1 ? "" : "s"} from before, under “Archived workspaces” at the bottom. They stay hidden unless you restore them.</p>}
         </div>
       )}
 
@@ -95,9 +95,9 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
       </div>
 
       {archived.length > 0 && (
-        <section>
-          <h2>Archived</h2>
-          <p className="muted small">Kept exactly as they were, with their accounts and history. They are not shown anywhere else until you restore them.</p>
+        <details style={{ marginTop: 28 }} open={sp.archived === "1"}>
+          <summary><b>Archived workspaces ({archived.length})</b></summary>
+          <p className="muted small" style={{ marginTop: 8 }}>Kept exactly as they were, with their accounts and history. They are not shown anywhere else until you restore them.</p>
           <div className="scroll-x">
             <table>
               <thead><tr><th>Workspace</th><th>Accounts</th><th>Posts published</th><th>Created</th><th></th></tr></thead>
@@ -108,7 +108,7 @@ export default async function OrganizationsPage({ searchParams }: { searchParams
               </tbody>
             </table>
           </div>
-        </section>
+        </details>
       )}
     </div>
   );

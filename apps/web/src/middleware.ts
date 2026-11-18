@@ -5,7 +5,7 @@ const PUBLIC = ["/login", "/setup", "/privacy", "/api/auth/login", "/api/auth/se
 
 export async function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (PUBLIC.some((p) => pathname === p || pathname.startsWith(p + "/")) || pathname.startsWith("/_next") || pathname === "/favicon.ico") {
+  if (PUBLIC.some((p) => pathname === p || pathname.startsWith(p + "/")) || pathname.startsWith("/_next") || pathname === "/favicon.ico" || pathname === "/icon.svg") {
     return NextResponse.next();
   }
   // CSRF: mutating API calls must come from our own origin (cookies are SameSite=Lax as well).
