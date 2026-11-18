@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { verifySessionToken } from "@sm/security/session";
 
 /** Reachable without a session. */
-const PUBLIC = ["/login", "/setup", "/privacy", "/api/auth/login", "/api/auth/setup", "/api/health", "/api/webhooks", "/api/jobs/tick", "/api/oauth"];
+const PUBLIC = ["/login", "/forgot", "/reset", "/setup", "/privacy", "/api/auth/login", "/api/auth/forgot", "/api/auth/reset", "/api/auth/setup", "/api/health", "/api/webhooks", "/api/jobs/tick", "/api/oauth"];
 /** Called by other servers, never by a browser form or script: no browser-origin check applies. Each authenticates itself (signature, secret, single-use state). */
 const MACHINE = ["/api/webhooks", "/api/jobs/tick", "/api/oauth"];
 

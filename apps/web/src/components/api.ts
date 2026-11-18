@@ -19,6 +19,10 @@ export async function api<T = unknown>(path: string, init?: RequestInit & { json
     const err = new Error((data as { error?: string })?.error ?? `HTTP ${res.status}`) as Error & { code?: string; status?: number };
     err.code = (data as { code?: string })?.code;
     err.status = res.status;
+    // The server decides when a step is owed; the page only follows it.
+    const here = `${window.location.pathname}${window.location.search}`;
+    const go: Record<string, string> = { reauth_required: `/account/confirm?next=${encodeURIComponent(here)}`, password_change_required: "/account/password", mfa_setup_required: "/account/security" };
+    if (err.code && go[err.code] && !window.location.pathname.startsWith("/account/")) window.location.assign(go[err.code]!);
     throw err;
   }
   return data as T;

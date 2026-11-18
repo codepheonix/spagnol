@@ -1,16 +1,18 @@
 import { z } from "zod";
-import { prisma } from "@sm/db";
-import { hashPassword, verifyPassword } from "@sm/security";
-import { audit } from "@sm/core";
-import { apiUser, handle, json, parseJson, HttpError } from "@/lib/api";
+import { changePassword } from "@sm/core";
+import { apiSession, handle, json, parseJson } from "@/lib/api";
+import { clientIp } from "@/lib/auth";
 
-const schema = z.object({ currentPassword: z.string(), newPassword: z.string().min(10).max(200) });
+const schema = z.object({ currentPassword: z.string().min(1).max(200), newPassword: z.string().min(1).max(200) });
 
+/**
+ * Password change. Works while the account is held at "change your password" (`gate: false`).
+ * Rules, reuse and breach checks are in packages/core/src/account-security.ts; every other session
+ * is signed out.
+ */
 export const POST = handle(async (req) => {
-  const user = await apiUser();
+  const { user, session } = await apiSession({ gate: false });
   const { currentPassword, newPassword } = await parseJson(req, schema);
-  if (!(await verifyPassword(currentPassword, user.passwordHash))) throw new HttpError(403, "Current password is wrong.", "bad_password");
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(newPassword) } });
-  await audit({ actorUserId: user.id, action: "auth.password_change" });
+  await changePassword(user.id, { current: currentPassword, next: newPassword, keepSessionId: session.id, ip: await clientIp() });
   return json({ ok: true });
 });

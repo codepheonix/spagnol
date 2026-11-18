@@ -2,9 +2,10 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
 import { ZodError, type ZodTypeAny, type z } from "zod";
 import { prisma, type Brand, type User } from "@sm/db";
-import { AppError } from "@sm/core";
+import { AppError, accountGate, assertEnvironment, hasRecentAuth } from "@sm/core";
 import { ProviderError } from "@sm/integrations";
-import { getSessionUser, getActiveBrand } from "./auth";
+import { getSession, getActiveBrand } from "./auth";
+import type { Session } from "@sm/db";
 
 export class HttpError extends Error {
   constructor(
@@ -16,10 +17,31 @@ export class HttpError extends Error {
   }
 }
 
-export async function apiUser(): Promise<User> {
-  const user = await getSessionUser();
-  if (!user) throw new HttpError(401, "Not signed in.", "unauthenticated");
-  return user;
+/**
+ * The signed-in user behind an API call. While the account must change its password, or its
+ * two-factor deadline has passed, every call is refused except the account's own endpoints
+ * (`gate: false`) — hiding the screens would not be a control.
+ */
+export async function apiSession(opts: { gate?: boolean } = {}): Promise<{ user: User; session: Session }> {
+  const s = await getSession();
+  if (!s) throw new HttpError(401, "Not signed in.", "unauthenticated");
+  if (opts.gate !== false) {
+    const gate = accountGate(s.user);
+    if (gate === "password") throw new HttpError(403, "Change your password before doing anything else.", "password_change_required");
+    if (gate === "mfa") throw new HttpError(403, "Set up two-factor sign-in before doing anything else.", "mfa_setup_required");
+  }
+  return s;
+}
+
+export async function apiUser(opts: { gate?: boolean } = {}): Promise<User> {
+  return (await apiSession(opts)).user;
+}
+
+/** For changes to keys, credentials and money: the password must have been entered in this session within the last ten minutes. */
+export async function apiUserRecentAuth(): Promise<User> {
+  const s = await apiSession();
+  if (!hasRecentAuth(s.session)) throw new HttpError(403, "Confirm your password to continue.", "reauth_required");
+  return s.user;
 }
 
 /** Resolves the brand from `?brandId=`/body or the active-brand cookie, enforcing ownership server-side. */
@@ -54,6 +76,8 @@ export function json(data: unknown, init?: ResponseInit) {
 export function handle(fn: (req: Request, ctx: { params: Promise<Record<string, string>> }) => Promise<Response>) {
   return async (req: Request, ctx: { params: Promise<Record<string, string>> }): Promise<Response> => {
     try {
+      // A deployment only talks to a database of its own environment (packages/core/src/environment.ts).
+      await assertEnvironment();
       return await fn(req, ctx);
     } catch (err) {
       if (err instanceof HttpError) return json({ error: err.message, code: err.code }, { status: err.status });

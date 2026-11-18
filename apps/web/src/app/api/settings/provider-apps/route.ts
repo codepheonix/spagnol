@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { audit, providerAppStatus, setProviderAppValue } from "@sm/core";
 import { verifyMetaApp } from "@sm/integrations";
-import { apiUser, handle, json, parseJson, HttpError } from "@/lib/api";
+import { apiUser, handle, json, parseJson, HttpError, apiUserRecentAuth } from "@/lib/api";
 
 /** Booleans only: provider app secrets are write-only and never returned to the browser. */
 export const GET = handle(async () => {
@@ -24,7 +24,7 @@ const schema = z.object({
  * is stored encrypted, so a typo is caught here and not on the first sign-in.
  */
 export const POST = handle(async (req) => {
-  const user = await apiUser();
+  const user = await apiUserRecentAuth();
   const input = await parseJson(req, schema);
   const changed: string[] = [];
   let metaAppName: string | null = null;

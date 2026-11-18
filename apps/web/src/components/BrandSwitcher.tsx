@@ -33,5 +33,5 @@ export function LocaleToggle({ locale }: { locale: string }) {
 
 export function LogoutButton({ label }: { label: string }) {
   const router = useRouter();
-  return <button className="small" onClick={async () => { await api("/api/auth/logout", { method: "POST" }); router.push("/login"); router.refresh(); }}>{label}</button>;
+  return <button className="small" onClick={async () => { await api("/api/auth/logout", { method: "POST" }); window.location.assign("/login"); }}>{label}</button>;
 }

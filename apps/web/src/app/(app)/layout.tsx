@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { prisma } from "@sm/db";
-import { getAiConfig } from "@sm/core";
+import { getAiConfig, mfaEnabled } from "@sm/core";
 import { requireUser, getActiveBrand } from "@/lib/auth";
 import { getLocale } from "@/lib/i18n";
 import { BrandSwitcher, LocaleToggle, LogoutButton } from "@/components/BrandSwitcher";
@@ -60,12 +60,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               <ThemeToggle labels={{ dark: L("Dark", "Scuro"), light: L("Light", "Chiaro") }} />
               <div className="row">
                 <LocaleToggle locale={locale} />
+                <Link className="btn small" href="/account/security">{L("Account security", "Sicurezza account")}</Link>
                 <Link className="btn small" href="/settings">{L("Settings", "Impostazioni")}</Link>
                 <LogoutButton label={L("Sign out", "Esci")} />
               </div>
             </div>
           </details>
         </header>
+        {!mfaEnabled(user) && (
+          <div className="notice-bar" role="status">
+            <span>{user.mfaGraceUntil ? L(`Two-factor sign-in must be on by ${new Intl.DateTimeFormat("en-GB", { dateStyle: "medium", timeZone: user.timezone || "UTC" }).format(user.mfaGraceUntil)}.`, `La verifica in due passaggi va attivata entro il ${new Intl.DateTimeFormat("it-IT", { dateStyle: "medium", timeZone: user.timezone || "UTC" }).format(user.mfaGraceUntil)}.`) : L("This account is protected by its password alone.", "Questo account è protetto dalla sola password.")}</span>
+            <Link className="btn small" href="/account/security">{L("Set up two-factor sign-in", "Attiva la verifica in due passaggi")}</Link>
+          </div>
+        )}
         <main className="main">{children}</main>
       </div>
     </div>

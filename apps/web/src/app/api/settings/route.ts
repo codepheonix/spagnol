@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { cookies } from "next/headers";
 import { prisma } from "@sm/db";
-import { getSecretSetting, setSecretSetting, setSetting, getSetting, audit } from "@sm/core";
+import { getSecretSetting, setSecretSetting, setSetting, getSetting, audit, hasRecentAuth } from "@sm/core";
 import { ZernioClient } from "@sm/integrations";
-import { apiUser, handle, json, parseJson } from "@/lib/api";
+import { apiSession, apiUser, handle, json, parseJson, HttpError } from "@/lib/api";
 import { LOCALE_COOKIE } from "@/lib/auth";
 
 const schema = z.object({ zernioApiKey: z.string().max(500).optional(), zernioWebhookSecret: z.string().max(500).optional(), aiApiKey: z.string().max(500).optional(), aiModel: z.string().max(120).optional(), locale: z.enum(["it", "en"]).optional(), timezone: z.string().max(64).optional() });
@@ -25,8 +25,10 @@ export const GET = handle(async () => {
 });
 
 export const POST = handle(async (req) => {
-  const user = await apiUser();
+  const { user, session } = await apiSession();
   const input = await parseJson(req, schema);
+  // Keys and signing secrets: the password must have been entered in this session in the last ten minutes.
+  if ((input.zernioApiKey !== undefined || input.zernioWebhookSecret !== undefined || input.aiApiKey !== undefined) && !hasRecentAuth(session)) throw new HttpError(403, "Confirm your password to continue.", "reauth_required");
   const changed: string[] = [];
   if (input.zernioApiKey !== undefined) {
     if (input.zernioApiKey) {
