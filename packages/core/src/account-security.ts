@@ -21,6 +21,8 @@ import { sendMail } from "./mailer";
 // ---------------------------------------------------------------------------
 
 export const PASSWORD_MIN_LENGTH = 12;
+/** How long an account may run without two-factor sign-in after choosing its password. */
+export const MFA_GRACE_MS = 7 * 24 * 3600_000;
 const COMMON = ["password", "passw0rd", "123456", "12345678", "qwerty", "azerty", "letmein", "welcome", "admin", "iloveyou", "abc123", "111111", "000000", "monkey", "dragon", "football", "sunshine", "princess", "changeme", "secret", "igerald"];
 
 export interface StrengthResult { ok: boolean; problems: string[] }
@@ -91,7 +93,8 @@ async function setNewPassword(user: User, next: string, opts: { keepSessionId?: 
   }
   await prisma.$transaction([
     prisma.passwordHistory.create({ data: { userId: user.id, passwordHash: user.passwordHash, reason: "previous" } }),
-    prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(next), passwordChangedAt: new Date(), mustChangePassword: false } }),
+    // An account without two-factor sign-in gets a week to turn it on, counted from this change.
+    prisma.user.update({ where: { id: user.id }, data: { passwordHash: await hashPassword(next), passwordChangedAt: new Date(), mustChangePassword: false, ...(!mfaEnabled(user) && !user.mfaGraceUntil ? { mfaGraceUntil: new Date(Date.now() + MFA_GRACE_MS) } : {}) } }),
     // Every other session ends: whoever held the old password is signed out.
     prisma.session.deleteMany({ where: { userId: user.id, ...(opts.keepSessionId ? { id: { not: opts.keepSessionId } } : {}) } }),
     prisma.passwordResetToken.updateMany({ where: { userId: user.id, usedAt: null }, data: { usedAt: new Date() } }),
@@ -222,9 +225,18 @@ export async function disableTotp(userId: string, proof: { password: string; cod
   await notify({ level: "error", title: "Two-factor sign-in was turned off", body: "The account is protected by its password only. Set it up again within 24 hours.", link: "/account/security" });
 }
 
+/**
+ * True when the password may not be used any longer: it was marked as exposed, or it was set before
+ * password changes were recorded at all (an account from before these rules, or one whose password
+ * an operator provisioned). Such an account chooses a new password before anything else opens.
+ */
+export function passwordChangeOwed(user: Pick<User, "mustChangePassword" | "passwordChangedAt">): boolean {
+  return user.mustChangePassword || !user.passwordChangedAt;
+}
+
 /** What the account still has to do before it may be used normally. */
-export function accountGate(user: Pick<User, "mustChangePassword" | "totpEnabledAt" | "totpSecretEnc" | "mfaGraceUntil">, now = new Date()): "ok" | "password" | "mfa" {
-  if (user.mustChangePassword) return "password";
+export function accountGate(user: Pick<User, "mustChangePassword" | "passwordChangedAt" | "totpEnabledAt" | "totpSecretEnc" | "mfaGraceUntil">, now = new Date()): "ok" | "password" | "mfa" {
+  if (passwordChangeOwed(user)) return "password";
   if (!mfaEnabled(user) && user.mfaGraceUntil && user.mfaGraceUntil < now) return "mfa";
   return "ok";
 }

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { accountGate, listSessions, mailConfigured, mfaEnabled, recoveryCodesLeft } from "@sm/core";
+import { accountGate, passwordChangeOwed, listSessions, mailConfigured, mfaEnabled, recoveryCodesLeft } from "@sm/core";
 import { getSession } from "@/lib/auth";
 import { SessionsPanel, TwoFactorPanel, type SessionRow } from "@/components/AccountForms";
 
@@ -21,7 +21,7 @@ export default async function SecurityPage({ searchParams }: { searchParams: Pro
   const s = await getSession();
   if (!s) redirect("/login");
   const { user, session } = s;
-  if (user.mustChangePassword) redirect("/account/password");
+  if (passwordChangeOwed(user)) redirect("/account/password");
   const tz = user.timezone || "UTC";
   const enabled = mfaEnabled(user);
   const sessions: SessionRow[] = (await listSessions(user.id, session.id)).map((x) => ({ id: x.id, current: x.current, device: device(x.userAgent), ip: x.ip, started: when(x.createdAt, tz), lastSeen: when(x.lastSeenAt, tz), expires: when(x.expiresAt, tz), secondFactor: x.secondFactor, waiting: enabled && !x.secondFactor }));

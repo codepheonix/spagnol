@@ -1,5 +1,5 @@
 import QRCode from "qrcode";
-import { mfaEnabled, startTotpEnrollment } from "@sm/core";
+import { mfaEnabled, passwordChangeOwed, startTotpEnrollment } from "@sm/core";
 import { apiSession, handle, json, HttpError } from "@/lib/api";
 
 /**
@@ -8,7 +8,7 @@ import { apiSession, handle, json, HttpError } from "@/lib/api";
  */
 export const POST = handle(async () => {
   const { user } = await apiSession({ gate: false });
-  if (user.mustChangePassword) throw new HttpError(403, "Change your password first.", "password_change_required");
+  if (passwordChangeOwed(user)) throw new HttpError(403, "Change your password first.", "password_change_required");
   if (mfaEnabled(user)) throw new HttpError(409, "Two-factor sign-in is already on.", "mfa_enabled");
   const { secret, otpauthUrl } = await startTotpEnrollment(user.id);
   const qrSvg = await QRCode.toString(otpauthUrl, { type: "svg", margin: 1, errorCorrectionLevel: "M" });

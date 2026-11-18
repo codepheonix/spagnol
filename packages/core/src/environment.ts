@@ -44,6 +44,7 @@ export async function checkEnvironment(env: EnvName = deploymentEnv()): Promise<
 let verified: Promise<void> | null = null;
 /** Throws 503 when the deployment and the database do not belong together. Checked once per server instance; a failure is re-checked on the next call. */
 export function assertEnvironment(): Promise<void> {
+  if (!process.env.DATABASE_URL) return Promise.reject(new AppError("This deployment has no database configured, so it cannot be used. Production data is not reachable from here.", 503, "no_database"));
   verified ??= checkEnvironment().then((r) => {
     if (!r.ok) {
       verified = null;

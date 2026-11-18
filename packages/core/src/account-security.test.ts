@@ -59,6 +59,9 @@ describe.skipIf(!dbOk)("password rotation, two-factor, reset and sessions", () =
   });
 
   it("an exposed password forces a change; the change refuses the wrong current password, weak, reused, exposed and breached passwords", async () => {
+    // An account whose password predates change tracking owes a change even before anything is marked.
+    expect(core.accountGate((await prisma.user.findUnique({ where: { id: userId } }))!)).toBe("password");
+    expect(core.accountGate({ mustChangePassword: false, passwordChangedAt: new Date(), totpEnabledAt: null, totpSecretEnc: null, mfaGraceUntil: null })).toBe("ok");
     await core.denyPasswordReuse(userId, "Leaked-in-chat-2026!");
     await core.requirePasswordChange(userId);
     expect(core.accountGate((await prisma.user.findUnique({ where: { id: userId } }))!)).toBe("password");
@@ -76,6 +79,10 @@ describe.skipIf(!dbOk)("password rotation, two-factor, reset and sessions", () =
     const u = (await prisma.user.findUnique({ where: { id: userId } }))!;
     expect(await verifyPassword(GOOD, u.passwordHash)).toBe(true);
     expect(u.mustChangePassword).toBe(false);
+    expect(core.accountGate(u)).toBe("ok");
+    // the week to turn two-factor sign-in on starts with this change
+    expect(u.mfaGraceUntil!.getTime()).toBeGreaterThan(Date.now() + 6.9 * 24 * 3600_000);
+    expect(core.accountGate(u, new Date(Date.now() + 8 * 24 * 3600_000))).toBe("mfa");
     expect((await prisma.session.findMany({ where: { userId } })).map((s) => s.id)).toEqual([sKeep]);
     expect(await prisma.session.count({ where: { userId: other } })).toBe(1); // nobody else is affected
     // the old password can never come back

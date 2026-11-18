@@ -69,11 +69,42 @@ check("wrong passwords are answered at first, then every further attempt is bloc
 const blocked = await req("/api/auth/login", json({ email: probe, password: "wrong" }, { origin: base }));
 check("a blocked attempt says how long to wait", blocked.status === 429 && Number(blocked.headers.get("retry-after")) > 0, `retry-after ${blocked.headers.get("retry-after")}s`);
 
+// 6b. Account security surfaces that need no credentials
+for (const p of ["/forgot", "/reset?token=" + "x".repeat(40)]) {
+  const r = await req(p);
+  check(`${p.split("?")[0]} is reachable signed out and carries a script policy`, r.status === 200 && (r.headers.get("content-security-policy") ?? "").includes("nonce-"), `status ${r.status}`);
+}
+const acct = await req("/account/security");
+check("account security page needs a session", [302, 307].includes(acct.status) && (acct.headers.get("location") ?? "").includes("/login"), `status ${acct.status}`);
+for (const [path, method] of [["/api/account/sessions", "GET"], ["/api/account/sessions", "DELETE"], ["/api/account/mfa/start", "POST"], ["/api/account/mfa/disable", "POST"], ["/api/account/reauth", "POST"], ["/api/auth/password", "POST"], ["/api/auth/mfa", "POST"]]) {
+  const r = await req(path, { method, headers: { "content-type": "application/json", origin: base }, body: method === "GET" ? undefined : JSON.stringify({ code: "000000", password: "x", currentPassword: "x", newPassword: "x" }) });
+  check(`${method} ${path} without a session is refused`, r.status === 401, `status ${r.status}`);
+}
+const unknownReset = await req("/api/auth/forgot", json({ email: `nobody-${Date.now()}@example.com` }, { origin: base }));
+check("a reset request for an unknown address gets the ordinary answer", unknownReset.status === 200 && (await unknownReset.json()).ok === true, `status ${unknownReset.status}`);
+check("a reset request from another site is refused", (await req("/api/auth/forgot", json({ email: probe }, { origin: "https://attacker.example" }))).status === 403);
+const resets = [];
+for (let i = 0; i < 26; i++) {
+  resets.push((await req("/api/auth/reset", json({ token: `made-up-${Date.now()}-${i}-${"x".repeat(20)}`, newPassword: "A-long-enough-passphrase-1" }, { origin: base }))).status);
+  if (resets.length >= 8 && resets.slice(-3).every((x) => x === 429)) break;
+}
+check("made-up reset links are refused, then guessing is blocked", resets.filter((x) => x === 400).length >= 5 && resets.slice(-3).every((x) => x === 429) && resets.every((x) => x === 400 || x === 429), resets.join(","));
+
 // 7. Session handling (only with credentials)
 if (process.env.SMOKE_EMAIL && process.env.SMOKE_PASSWORD) {
   const li = await req("/api/auth/login", json({ email: process.env.SMOKE_EMAIL, password: process.env.SMOKE_PASSWORD }, { origin: base }));
   const set = li.headers.get("set-cookie") ?? "";
   check("legitimate sign-in still works", li.status === 200);
+  const first = await li.clone().json().catch(() => ({}));
+  if (first.secondFactor) {
+    const c0 = (li.headers.get("set-cookie") ?? "").split(";")[0];
+    check("with two-factor sign-in, the password alone opens no data", (await req("/api/brands", { headers: { cookie: c0 } })).status === 401);
+    check("with two-factor sign-in, the password alone opens no page", [302, 307].includes((await req("/accounts", { headers: { cookie: c0 } })).status));
+    console.log("SKIP  remaining session checks (this account needs a code from its authenticator app)");
+    const failedEarly = results.filter((r) => !r.ok).length;
+    console.log(`\n${results.length - failedEarly} passed, ${failedEarly} failed`);
+    process.exit(failedEarly ? 1 : 0);
+  }
   check("session cookie is HttpOnly and SameSite=Lax" + (https ? " and Secure" : ""), /HttpOnly/i.test(set) && /SameSite=Lax/i.test(set) && (!https || /Secure/i.test(set)));
   const cookie = set.split(";")[0];
   const me = await req("/api/brands", { headers: { cookie } });

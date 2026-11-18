@@ -62,7 +62,7 @@ export function PasswordChangeForm({ forced, next }: { forced: boolean; next: st
       }}
     >
       <h2 style={{ marginTop: 0 }}>{forced ? "Choose a new password" : "Change your password"}</h2>
-      {forced && <div className="msg info">The password on this account was shared outside the app, so it can no longer be trusted. Choose a new one here. It is sent straight to the server over an encrypted connection and nobody else sees it.</div>}
+      {forced && <div className="msg info">This password can no longer be used: it was set before the current security rules, or it was shared outside the app. Choose a new one here. It goes straight to the server over an encrypted connection; nobody else sees it and it is stored only as a one-way hash.</div>}
       <label htmlFor="pc-current">Current password</label>
       <input id="pc-current" type="password" value={current} onChange={(e) => setCurrent(e.target.value)} autoComplete="current-password" required autoFocus />
       <NewPasswordFields value={pw} confirm={again} onValue={setPw} onConfirm={setAgain} idPrefix="pc" />

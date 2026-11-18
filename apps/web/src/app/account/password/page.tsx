@@ -1,3 +1,4 @@
+import { passwordChangeOwed } from "@sm/core";
 import { requireUser } from "@/lib/auth";
 import { PasswordChangeForm } from "@/components/AccountForms";
 
@@ -9,7 +10,7 @@ export default async function PasswordPage() {
     <div>
       <h1>Password</h1>
       <p className="muted">{user.email}</p>
-      <PasswordChangeForm forced={user.mustChangePassword} next="/account/security?changed=1" />
+      <PasswordChangeForm forced={passwordChangeOwed(user)} next="/account/security?changed=1" />
     </div>
   );
 }
