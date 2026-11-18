@@ -56,10 +56,16 @@ check("Meta webhook refuses an unsigned delivery", [401, 403, 503].includes(m.st
 const cb = await req("/api/oauth/facebook/callback?code=x&state=smoke-" + Date.now());
 check("sign-in return with an unknown state attaches nothing", [302, 307].includes(cb.status) && (cb.headers.get("location") ?? "").includes("error="));
 
-// 6. Sign-in throttle (made-up address, so no real account is affected)
+// 6. Sign-in throttle (made-up address, so no real account is affected). The rule is five wrong
+// passwords per e-mail + network address. A tester whose requests leave from several addresses
+// (a proxy pool) reaches five on each address in turn, so allow for a few addresses.
 const statuses = [];
-for (let i = 0; i < 7; i++) statuses.push((await req("/api/auth/login", json({ email: probe, password: `wrong-${i}` }, { origin: base }))).status);
-check("five wrong passwords are answered, then the address is blocked", statuses.slice(0, 5).every((s) => s === 401) && statuses.slice(5).every((s) => s === 429), statuses.join(","));
+for (let i = 0; i < 26; i++) {
+  statuses.push((await req("/api/auth/login", json({ email: probe, password: `wrong-${i}` }, { origin: base }))).status);
+  if (statuses.length >= 8 && statuses.slice(-3).every((s) => s === 429)) break;
+}
+const answered = statuses.filter((s) => s === 401).length;
+check("wrong passwords are answered at first, then every further attempt is blocked", answered >= 5 && statuses.slice(-3).every((s) => s === 429) && statuses.every((s) => s === 401 || s === 429), `${answered} answered, then blocked (${statuses.length} attempts)`);
 const blocked = await req("/api/auth/login", json({ email: probe, password: "wrong" }, { origin: base }));
 check("a blocked attempt says how long to wait", blocked.status === 429 && Number(blocked.headers.get("retry-after")) > 0, `retry-after ${blocked.headers.get("retry-after")}s`);
 
